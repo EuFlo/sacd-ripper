@@ -258,16 +258,32 @@ int scarletbook_id3_tag_render(scarletbook_handle_t *handle, uint8_t *buffer, in
         // Genre
         frame = id3_add_frame(tag, ID3_TCON);       
         id3_set_text_wraper(frame, (char *)genre_table[sacd_id3_genres[handle->area[area].area_isrc_genre->track_genre[track].genre & 0x1f]], handle->id3_tag_mode);
+        
+        //  Version 2.3 –> version 2.4
+        //TYER, TDAT, TIME –> TDRC
 
-        // YEAR
-        snprintf(tmp, 200, "%04d", handle->master_toc->disc_date_year);
-        frame = id3_add_frame(tag, ID3_TYER);
-        id3_set_text(frame, tmp);
+        if(tag->id3_version == 4) // ID3 v2.4
+        {
+            snprintf(tmp, 200, "%04d-%02d-%02d", handle->master_toc->disc_date_year,handle->master_toc->disc_date_month, handle->master_toc->disc_date_day);
+            frame = id3_add_frame(tag, ID3_TDRC);
+            id3_set_text(frame, tmp);
+        }
+        else  // ID3 v2.3
+        {  
+            // YEAR
+            //ID3 v2.3 Date Frames
+            // TYER year (recording year of form YYYY, always 4 bytes)
+            snprintf(tmp, 200, "%04d", handle->master_toc->disc_date_year);
+            frame = id3_add_frame(tag, ID3_TYER);
+            id3_set_text(frame, tmp);
 
-        // Month, day
-        snprintf(tmp, 200, "%02d%02d", handle->master_toc->disc_date_month, handle->master_toc->disc_date_day);
-        frame = id3_add_frame(tag, ID3_TDAT);
-        id3_set_text(frame, tmp);
+            // Month, day
+            //ID3 v2.3 Date Frames
+            //TDAT date (recording date of form DDMM, always 4 bytes)
+            snprintf(tmp, 200, "%02d%02d", handle->master_toc->disc_date_day,handle->master_toc->disc_date_month);
+            frame = id3_add_frame(tag, ID3_TDAT);
+            id3_set_text(frame, tmp);
+        }
 
     } // end if not minimal
 
