@@ -179,7 +179,7 @@ sacd_reader_t *sacd_open(const char *ppath)
     ret = stat(path, &fileinfo);
 #endif
     // DEBUG
-    LOG(lm_main, LOG_NOTICE, ("stat(path,&fileinfo), ret=%d, path=%s\n", ret,path));
+    LOG(lm_main, LOG_NOTICE, ("NOTICE in sacd_reader:sacd_open()... stat(path,&fileinfo), ret=%d, path=[%s]\n", ret,path));
 	
     if (ret != 0)
     {
@@ -188,7 +188,7 @@ sacd_reader_t *sacd_open(const char *ppath)
         {
             ret_val = sacd_open_image_file(path);
             // DEBUG
-            LOG(lm_main, LOG_NOTICE, ("[ret stat !=0]Return after sacd_open_image_file, ret_val=%s, path=%s\n", ret_val==NULL ? "NULL":"Succes", path));
+            LOG(lm_main, LOG_NOTICE, ("NOTICE in sacd_reader:sacd_open()...[ret stat !=0] Return after sacd_open_image_file, ret_val=%s, path=[%s]\n", ret_val==NULL ? "NULL":"Succes", path));
 
             free(path);
             return ret_val;
@@ -196,6 +196,7 @@ sacd_reader_t *sacd_open(const char *ppath)
         /* If we can't stat the file, give up */
         fprintf(stderr, "libsacdread: Can't stat %s\n", path);
         perror("");
+        LOG(lm_main, LOG_ERROR, ("ERROR in sacd_reader:sacd_open()... libsacdread: Can't stat %s",path));
         free(path);
         return NULL;
     }
@@ -219,7 +220,7 @@ sacd_reader_t *sacd_open(const char *ppath)
 
         ret_val = sacd_open_image_file(path);
         // DEBUG
-        LOG(lm_main, LOG_NOTICE, ("[_S_IFREG] Is an regular  iso file:%s. sacd_open_image_file -> ret_val=%s\n", path,ret_val==NULL ?"NULL":"Succes"));
+        LOG(lm_main, LOG_NOTICE, ("NOTICE in sacd_reader:sacd_open()... [_S_IFREG] Is an regular  iso file[%s] sacd_open_image_file -> ret_val=%s", path,ret_val==NULL ?"NULL":"Succes"));
 #endif
 
         free(path);
@@ -232,7 +233,7 @@ sacd_reader_t *sacd_open(const char *ppath)
  #endif
     {
         // DEBUG
-        LOG(lm_main, LOG_NOTICE, ("[_S_IFDIR] Is a directory:%s\n", path));
+        LOG(lm_main, LOG_NOTICE, ("NOTICE in sacd_reader:sacd_open()...[_S_IFDIR] Is a directory[%s]", path));
 
         sacd_reader_t *auth_drive = 0;
         char          *path_copy;
@@ -382,6 +383,8 @@ sacd_reader_t *sacd_open(const char *ppath)
 
     /* If it's none of the above, screw it. */
     fprintf(stderr, "libsacdread: Could not open %s\n", path);
+    
+    LOG(lm_main, LOG_ERROR, ("ERROR in sacd_reader:sacd_open()... libsacdread: Could not open %s",path));
     free(path);
     return NULL;
 
