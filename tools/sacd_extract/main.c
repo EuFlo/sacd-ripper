@@ -61,13 +61,13 @@
 
 
 
-#if defined(WIN32) || defined(_WIN32)
+// #if defined(WIN32) || defined(_WIN32)
 
-#define CHAR2WCHAR(dst, src) dst = (wchar_t *)charset_convert(src, strlen(src), "UTF-8", "UCS-2-INTERNAL")
-#else
+// #define CHAR2WCHAR(dst, src) dst = (wchar_t *)charset_convert(src, strlen(src), "UTF-8", "UCS-2-INTERNAL")
+// #else
 
-#define CHAR2WCHAR(dst, src) dst = (wchar_t *)charset_convert(src, strlen(src), "UTF-8", "WCHAR_T") 
-#endif
+// #define CHAR2WCHAR(dst, src) dst = (wchar_t *)charset_convert(src, strlen(src), "UTF-8", "WCHAR_T") 
+// #endif
 
 static struct opts_s
 {
@@ -91,7 +91,7 @@ static struct opts_s
     int            performer_flag;       // if performer ==1 the performer from each track is added
     int            concatenate;  // concatenate consecutive tracks specified in selected_tracks
     int            logging;  // if 1 save logs in a file
-    int            id3_tag_mode; // id3_tag_mode;  // 0=no id3 inserted; 1 or 3 =default id3 v2.3; 2=miminal id3v2.3 tag; 4=id3v2.4;5=id3v2.4 minimal
+    int            id3_tag_mode; // 0=>no id3 inserted; 1=>id3 v2.3 with UTF-16 encoding; 2=>miminal id3v2.3 tag with UTF-16 encoding; 3=>id3v2.3 with ISO_8859_1 encoding; 4=>id3v2.4 with UTF-8 encoding; 5=>id3v2.4 minimal with UTF-8 encoding
     int            version;
     int            concurrent;
 } opts;
@@ -257,10 +257,20 @@ static int parse_options(int argc, char *argv[])
             break;	
         case 'c': opts.convert_dst = 1; break;
         case 'C': opts.export_cue_sheet = 1; break;
-        case 'i': opts.input_device = strdup(optarg); break;
+        case 'i':
+        {
+            size_t n = strlen(optarg);
+            if (n >= MAX_BUFF_FULL_PATH_LEN) n = MAX_BUFF_FULL_PATH_LEN-1;
+            //opts.input_device = strdup(optarg);
+            opts.input_device = calloc(n+1, sizeof(char));
+            memcpy(opts.input_device, optarg, n);   
+            break;
+
+        } 
         case 'o':
         {
 			size_t n = strlen(optarg);
+            if (n >= MAX_BUFF_FULL_PATH_LEN) n = MAX_BUFF_FULL_PATH_LEN-1;
             if (n >= 2)
             {     				
 				// remove double quotes if exists (especially in Windows)
@@ -290,6 +300,7 @@ static int parse_options(int argc, char *argv[])
         case 'y': 
         {
 			size_t n = strlen(optarg);
+            if (n >= MAX_BUFF_FULL_PATH_LEN) n = MAX_BUFF_FULL_PATH_LEN-1;
             if (n >= 2)
             {     				
 				// remove double quotes if exists (especially in Windows)
@@ -428,7 +439,7 @@ static void init(void)
     opts.concatenate        = 0; // concatenate consecutive tracks specified in t
     opts.select_tracks      = 0;
     opts.logging            = 0;
-    opts.id3_tag_mode       = 4; // default id3v2. tag and UTF8 encoding
+    opts.id3_tag_mode       = 3; // default id3v2.3 ; ISO_8859_1 encoding // id3v2.4 tag and UTF8 encoding
     opts.concurrent         = 0;
 
 #if defined(WIN32) || defined(_WIN32)
@@ -508,8 +519,12 @@ int read_config()
     ret = stat(filename_cfg, &fileinfo);
 #endif
 
-    if (ret != 0)
-        return 0; // if file cfg not exists then exit
+    if (ret != 0) // if cfg file do not exists
+    {
+Use_default:
+        fwprintf(stdout, L"\nUse default configuration settings...\n" );
+        return 0; 
+    }
 
 #if defined(WIN32) || defined(_WIN32)
     if ((fileinfo_win.st_mode & _S_IFMT) == _S_IFREG)
@@ -547,9 +562,9 @@ int read_config()
                 opts.id3_tag_mode=0;
             if (strstr(content, "id3tag=1") != NULL) // 1=id3 v2.3;  UTF-16 encoding
                 opts.id3_tag_mode = 1;
-            if (strstr(content, "id3tag=2") != NULL)   // 2=miminal id3v2.3 tag; UTF-16 encoding
+            if (strstr(content, "id3tag=2") != NULL) // 2=miminal id3v2.3 tag; UTF-16 encoding
                 opts.id3_tag_mode = 2;
-            if (strstr(content, "id3tag=3") != NULL) // 4=id3v2.3 ; ISO_8859_1 encoding
+            if (strstr(content, "id3tag=3") != NULL) // 3=id3v2.3 ; ISO_8859_1 encoding
                 opts.id3_tag_mode = 3;
             if (strstr(content, "id3tag=4") != NULL) // 4=id3v2.4; UTF-8 encoding
                 opts.id3_tag_mode = 4;
@@ -558,57 +573,85 @@ int read_config()
         }
         fclose(fp);
         fwprintf(stdout, L"\nFound configuration 'sacd_extract.cfg' file...\n" );
-        fwprintf(stdout, L"\tArtist will be added in folder name (artist=%d) %ls\n",opts.artist_flag, opts.artist_flag > 0 ? L"yes" : L"no");
-        fwprintf(stdout, L"\tPerformer will be added in filename of track (performer=%d) %ls\n",opts.performer_flag, opts.performer_flag > 0 ? L"yes" : L"no");
-        fwprintf(stdout, L"\tPadding-less (nopad=%d) %ls\n", opts.dsf_nopad, opts.dsf_nopad != 0 ? L"yes" : L"no");
-        fwprintf(stdout, L"\tPauses included (pauses=%d) %ls\n", !opts.audio_frame_trimming, opts.audio_frame_trimming == 0 ? L"yes" : L"no");
-        fwprintf(stdout, L"\tConcatenate (concatenate=%d) %ls\n", opts.concatenate, opts.concatenate > 0 ? L"yes" : L"no");
-        switch (opts.id3_tag_mode)
-        {
-        case 0:
-            fwprintf(stdout, L"\tID3tag no inserted (id3tag = %d) \n", opts.id3_tag_mode);
-            break;
-        case 1:
-        case 2:
-        case 3:
-            fwprintf(stdout, L"\tID3tagV2.3 (id3tag = %d) %ls\n", opts.id3_tag_mode, opts.id3_tag_mode == 2 ? L"minimal" : L"yes");
-            break;
-        case 4:
-        case 5:
-            fwprintf(stdout, L"\tID3tagV2.4 (id3tag = %d) %ls\n", opts.id3_tag_mode, opts.id3_tag_mode == 5 ? L"minimal" : L"yes");
-            break;
-        default:
-            fwprintf(stdout, L"\tID3tag (id3tag = %d)\n", opts.id3_tag_mode);
-            break;
-        }
-        fwprintf(stdout, L"\tLogging (logging = %d) %ls\n", opts.logging, opts.logging != 0 ? L"yes" : L"no");
+
         return 1;
     }
     else
     {
-        return 0;
+        goto Use_default;
     }
     
 } // end read_config
 
 void show_options()
 {
+        
+    fwprintf(stdout, L"\tArtist will be added in folder name [artist=%d] %ls\n",opts.artist_flag, opts.artist_flag > 0 ? L"yes" : L"no");
+    fwprintf(stdout, L"\tPerformer will be added in filename of track [performer=%d] %ls\n",opts.performer_flag, opts.performer_flag > 0 ? L"yes" : L"no");
+    fwprintf(stdout, L"\tPadding-less [nopad=%d] %ls\n", opts.dsf_nopad, opts.dsf_nopad != 0 ? L"yes" : L"no");
+    fwprintf(stdout, L"\tPauses included [pauses=%d] %ls\n", !opts.audio_frame_trimming, opts.audio_frame_trimming == 0 ? L"yes" : L"no");
+    fwprintf(stdout, L"\tConcatenate [concatenate=%d] %ls\n", opts.concatenate, opts.concatenate > 0 ? L"yes" : L"no");
+    switch (opts.id3_tag_mode)
+    {
+    case 0:
+        fwprintf(stdout, L"\tID3tag not inserted [id3tag = %d] \n", opts.id3_tag_mode);
+        break;
+    case 1:
+        fwprintf(stdout, L"\tID3tagV2.3 UCS-2 encoding (UTF-16 encoded Unicode with BOM) [id3tag = %d]\n", opts.id3_tag_mode);
+        break;
+    case 2:
+        fwprintf(stdout, L"\tID3tagV2.3 (UCS-2 encoding, miminal) [id3tag = %d]\n", opts.id3_tag_mode);
+        break;   
+    case 3:
+        fwprintf(stdout, L"\tID3tagV2.3 (ISO_8859_1 encoding) [id3tag = %d]\n", opts.id3_tag_mode);
+        break;
+    case 4:
+         fwprintf(stdout, L"\tID3tagV2.4 (UTF-8 encoding) [id3tag = %d]\n", opts.id3_tag_mode);
+        break;   
+    case 5:
+        fwprintf(stdout, L"\tID3tagV2.4 (UTF-8 encoding, minimal) [id3tag = %d]\n", opts.id3_tag_mode);
+        break;
+    default:
+        fwprintf(stdout, L"\tID3tag unknonw [id3tag = %d]\n", opts.id3_tag_mode);
+        break;
+    }
+    fwprintf(stdout, L"\tLogging [logging = %d] %ls\n", opts.logging, opts.logging != 0 ? L"yes" : L"no");
+
+
     fwprintf(stdout, L"Options received:\n");
     
-    if(opts.input_device != NULL)fwprintf(stdout, L"\tInput -i (iso or connection)%s\n", opts.input_device);
-    if(opts.output_dir !=NULL) fwprintf(stdout, L"\tOutput folder -o %s\n", opts.output_dir);
-    if(opts.output_dir_conc !=NULL) fwprintf(stdout, L"\tOutput folder for concurent -y %s\n", opts.output_dir_conc);
+    if(opts.input_device != NULL)
+    {
+        wchar_t *wide_filename;
+        CHAR2WCHAR(wide_filename, opts.input_device);
+        fwprintf(stdout, L"\tInput -i (iso or connection) [%ls]\n",wide_filename);
+        free(wide_filename);
+    }
+    if(opts.output_dir !=NULL)
+    {
+        wchar_t *wide_filename;
+        CHAR2WCHAR(wide_filename, opts.output_dir);
+        fwprintf(stdout, L"\tOutput folder -o [%ls]\n", wide_filename);
+        free(wide_filename);        
+    }
+    if(opts.output_dir_conc !=NULL) 
+    {  
+        wchar_t *wide_filename;
+        CHAR2WCHAR(wide_filename, opts.output_dir_conc);
+        fwprintf(stdout, L"\tOutput folder for concurent -y [%ls]\n",wide_filename);
+        free(wide_filename);           
+    }
     if(opts.print != 0)fwprintf(stdout, L"\tPrint details of album -P \n");
-    if(opts.two_channel != 0)fwprintf(stdout, L"\t Asked two channels -2 \n");
-    if(opts.multi_channel != 0)fwprintf(stdout, L"\t Asked multi channels -m \n");
-    if(opts.output_dsf != 0)fwprintf(stdout, L"\t Asked dsf -s \n");
-    if(opts.output_dsdiff != 0)fwprintf(stdout, L"\t Asked dsddif -p \n");
-    if(opts.output_dsdiff_em != 0)fwprintf(stdout, L"\t Asked dsf -e \n");
-    if(opts.dsf_nopad  != 0)fwprintf(stdout, L"\t Asked dsf nopad -z \n");
-    if(opts.output_iso != 0)fwprintf(stdout, L"\t Asked ISO -I \n");
-    if(opts.convert_dst != 0)fwprintf(stdout, L"\t Asked for DST decompression -c \n");
-    if(opts.export_cue_sheet != 0)fwprintf(stdout, L"\t Asked for cuesheet+xml metadata -C \n");
-    if(opts.concurrent != 0)fwprintf(stdout, L"\t Asked for concurrent -w \n");
+    if(opts.two_channel != 0)fwprintf(stdout, L"\tAsked two channels -2 \n");
+    if(opts.multi_channel != 0)fwprintf(stdout, L"\tAsked multi channels -m \n");
+    if(opts.output_dsf != 0)fwprintf(stdout, L"\tAsked dsf -s \n");
+    if(opts.output_dsdiff != 0)fwprintf(stdout, L"\tAsked dsddif -p \n");
+    if(opts.output_dsdiff_em != 0)fwprintf(stdout, L"\tAsked dsf -e \n");
+    if(opts.dsf_nopad  != 0)fwprintf(stdout, L"\tAsked dsf nopad -z \n");
+    if(opts.output_iso != 0)fwprintf(stdout, L"\tAsked ISO -I \n");
+    if(opts.convert_dst != 0)fwprintf(stdout, L"\tAsked for DST decompression -c \n");
+    if(opts.export_cue_sheet != 0)fwprintf(stdout, L"\tAsked for cuesheet+xml metadata -C \n");
+    if(opts.concurrent != 0)fwprintf(stdout, L"\tAsked for concurrent -w \n");
 
     if(opts.select_tracks > 0) 
     {
@@ -624,7 +667,7 @@ void show_options()
 
 }
 
-#define MAX_PATH_OUTPUT_SIZE 16384U
+//#define MAX_PATH_OUTPUT_SIZE 16384U  ---> replaced by MAX_BUFF_FULL_PATH_LEN in fileutils.h
 
 //   Creates directory tree like: Album title (\ (Disc no.. )\ Stereo (or Multich)
 //   Useful for dsf, dff files.
@@ -635,55 +678,57 @@ void show_options()
 //
 char *create_path_output(scarletbook_handle_t *handle, int area_idx, char * base_output_dir)
 {
-#if defined(WIN32) || defined(_WIN32)
-char PATH_TRAILING_SLASH[2]= {'\\','\0'};
-#else
-char PATH_TRAILING_SLASH[2] = {'/', '\0'};
-#endif
-
     char *path_output;
-    char *album_path = get_path_disc_album(handle,opts.artist_flag);
+    char *album_path;
     size_t album_path_len;
-    size_t path_output_size = MAX_PATH_OUTPUT_SIZE;
+    size_t path_output_size = MAX_BUFF_FULL_PATH_LEN; //MAX_PATH_OUTPUT_SIZE;
 	
+    album_path = get_path_disc_album(handle,opts.artist_flag);
 	if(album_path==NULL)return NULL;
 
     album_path_len = strlen(album_path);
+
+    LOG(lm_main, LOG_NOTICE, ("NOTICE in main:create_path_output()...after get_path-disc_album: album_path=[%s]; len=[%d]", album_path,album_path_len));
 	
 	if(base_output_dir !=NULL)
 	{
       size_t base_output_dir_len;
 
-      base_output_dir_len =  min(strlen(base_output_dir), MAX_PATH_OUTPUT_SIZE/2);
-      path_output_size = min(base_output_dir_len + 1 + album_path_len + 20, MAX_PATH_OUTPUT_SIZE - 1 );
+      base_output_dir_len =  strlen(base_output_dir);
+      if(base_output_dir_len >= MAX_BUFF_FULL_PATH_LEN/2)base_output_dir_len = MAX_BUFF_FULL_PATH_LEN/2; // shrink the size of base_output_dir to half
+
+      path_output_size = min(base_output_dir_len + 1 + album_path_len + 20,  MAX_BUFF_FULL_PATH_LEN - 1 );
       path_output = calloc(path_output_size, sizeof(char));
 
       if(path_output != NULL)
       {
-
-        strcpy(path_output, base_output_dir);
+        memcpy(path_output, base_output_dir, base_output_dir_len);
 
     #if defined(WIN32) || defined(_WIN32)      
         if (base_output_dir[base_output_dir_len-1] != '\\')
+            strcat(path_output, "\\");
     #else
         if (base_output_dir[base_output_dir_len-1] != '/' )
+            strcat(path_output, "/");
     #endif      
-            strcat(path_output, PATH_TRAILING_SLASH);
+            
 
-        if( base_output_dir_len + 1 + album_path_len < path_output_size)
-            strncat(path_output, album_path, album_path_len);
+        if( base_output_dir_len + 2 + album_path_len < path_output_size)
+            strcat(path_output, album_path);
       }
 
 	}
 	else
     {
-      path_output_size = min(album_path_len + 20, MAX_PATH_OUTPUT_SIZE);
+      path_output_size = min(album_path_len + 20, MAX_BUFF_FULL_PATH_LEN); //MAX_PATH_OUTPUT_SIZE
 	  path_output = calloc(path_output_size, sizeof(char));
 
       if(path_output != NULL)
       {
         strcat(path_output, album_path);
       }
+      else
+        LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output()...calloc() returned NULL"));
 
     }
 
@@ -692,17 +737,23 @@ char PATH_TRAILING_SLASH[2] = {'/', '\0'};
 
     if (has_multi_channel(handle))
     {
-        strcat(path_output, PATH_TRAILING_SLASH);
+        
+    #if defined(WIN32) || defined(_WIN32)            
+        strcat(path_output, "\\");
+    #else      
+        strcat(path_output, "/");
+    #endif   
+
         strcat(path_output, get_speaker_config_string(handle->area[area_idx].area_toc));
     }
 
-    int ret_mkdir = recursive_mkdir(path_output, base_output_dir, 0774);
+    int ret_mkdir = recursive_mkdir(path_output, base_output_dir, 0777);
 
     if (ret_mkdir != 0)
     {
         wchar_t *wide_filename;
         CHAR2WCHAR(wide_filename, path_output);
-        fwprintf(stderr, L"\n\n Error: %s directory can't be created.\n", wide_filename);
+        fwprintf(stderr, L"\n\n Error: %ls directory can't be created.\n", wide_filename);
         free(wide_filename);
 
         LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output()...directory can't be created: %s  ", path_output));
@@ -726,7 +777,7 @@ char * return_current_directory()
     if ((buffer = _getcwd(NULL, 0)) == NULL)
     {
         perror("_getcwd error");
-        fwprintf(stderr, L"\n\n Error: Cannot get the working directory.\n");
+        fwprintf(stdout, L"\n\n Error: Cannot get the working directory.\n");
     }
         
 #else
@@ -734,7 +785,7 @@ char * return_current_directory()
     if((buffer = getcwd(NULL,0)) == NULL)
     {
         perror("_getcwd error");
-        fwprintf(stderr, L"\n\n Error: Cannot get the working directory.\n");
+        fwprintf(stdout, L"\n\n Error: Cannot get the working directory.\n");
     }
 #endif
 
@@ -789,18 +840,18 @@ char * return_current_directory()
         fwprintf(stdout, L"\nsacd_extract client " SACD_RIPPER_VERSION_STRING "\n");
         fwprintf(stdout, L"\nEnhanced by euflo ....starting!\n");
 
-        int exist_cfg = read_config();
+        read_config();
         init_logging(opts.logging); //init_logging(0); 1= write logs in a file
 
         show_options();
 
-        // Get the current (working) directory:
+        // Just print the current (working) directory:
         char *buffer;
         if ((buffer = return_current_directory() ) != NULL)   
         {
             wchar_t *wide_filename;
             CHAR2WCHAR(wide_filename, buffer);
-            fwprintf(stdout, L"\nCurrent (working) directory (for the app and 'sacd_extract.cfg' file): %ls\n",wide_filename);
+            fwprintf(stdout, L"\nCurrent (working) directory (for the app and 'sacd_extract.cfg' file): [%ls]\n",wide_filename);
             free(wide_filename);
             free(buffer);
         }
@@ -812,17 +863,6 @@ char * return_current_directory()
         {
             //fwprintf(stdout, L"\n" SACD_RIPPER_VERSION_INFO "\n");
             fwprintf(stdout, L"git repository: " SACD_RIPPER_REPO "\n");
-
-            if(!exist_cfg)  // do not repeat again the same text...as in read-config()
-            {
-                    fwprintf(stdout, L"Configuration settings:\n");
-                    fwprintf(stdout, L"\tArtist will be added in folder name (artist=%d) %ls\n", opts.artist_flag, opts.artist_flag > 0 ? L"yes" : L"no");
-                    fwprintf(stdout, L"\tPerformer will be added in filename of track (performer=%d) %ls\n", opts.performer_flag, opts.performer_flag > 0 ? L"yes" : L"no");
-                    fwprintf(stdout, L"\tPadding-less (nopad=%d) %ls\n", opts.dsf_nopad, opts.dsf_nopad != 0 ? L"yes" : L"no");
-                    fwprintf(stdout, L"\tPauses included (pauses=%d) %ls\n", !opts.audio_frame_trimming, opts.audio_frame_trimming == 0 ? L"yes" : L"no");
-                    fwprintf(stdout, L"\tConcatenate (concatenate=%d) %ls\n", opts.concatenate, opts.concatenate > 0 ? L"yes" : L"no");
-                    fwprintf(stdout, L"\tID3tag (id3tag = %d)\n", opts.id3_tag_mode);
-            }
             
             goto exit_main;
         }
@@ -852,8 +892,10 @@ char * return_current_directory()
             {
                 wchar_t *wide_filename;
                 CHAR2WCHAR(wide_filename, opts.output_dir);
-                fwprintf(stdout, L"%ls doesn't exist or is not a directory.\n",wide_filename);
+                fwprintf(stdout, L"%ls output dir doesn't exist or is not a directory.\n",wide_filename);
                 free(wide_filename);
+
+                LOG(lm_main, LOG_ERROR, ("ERROR in main: output dir [%s] doesn't exist or is not a directory!!\n", opts.output_dir));
 
 				exit_main_flag=-1;
                 goto exit_main;
@@ -868,8 +910,10 @@ char * return_current_directory()
             {
                 wchar_t *wide_filename;
                 CHAR2WCHAR(wide_filename, opts.output_dir_conc);
-                fwprintf(stdout, L"%ls doesn't exist or is not a directory.\n", opts.output_dir_conc);
+                fwprintf(stdout, L"%ls doesn't exist or is not a directory.\n",wide_filename);
                 free(wide_filename);
+
+                LOG(lm_main, LOG_ERROR, ("ERROR in main: output dir conc [%s] doesn't exist or is not a directory!!\n", opts.output_dir_conc));
 
                 exit_main_flag=-1;
                 goto exit_main;
@@ -882,6 +926,9 @@ char * return_current_directory()
         {
             opts.input_device = strdup("/dev/cdrom");
         }
+
+        fwprintf(stdout, L"\nStart reading sacd...\n");
+        LOG(lm_main, LOG_NOTICE, ("Start reading sacd..."));
 
         sacd_reader = sacd_open(opts.input_device);
         if (sacd_reader != NULL) 
@@ -897,7 +944,7 @@ char * return_current_directory()
 
 
                 album_filename = get_album_dir(handle, opts.artist_flag);
-                LOG(lm_main, LOG_NOTICE, ("NOTICE in main:get_album_dir()...album_filename: %s", album_filename));
+                LOG(lm_main, LOG_NOTICE, ("NOTICE in main:get_album_dir()...album_filename=[%s]", album_filename));
 
                 if (opts.print)
                 {
@@ -906,27 +953,8 @@ char * return_current_directory()
 
                 uint32_t total_sectors = sacd_get_total_sectors(sacd_reader); // get the real full size of disc [number of sectors] or file [number of SACD_LSN_SIZE]
 
-                // made some checks on the total size of iso/disc
-                uint32_t area1_sectors_max = handle->master_toc->area_1_toc_2_start + handle->master_toc->area_1_toc_size;
-                uint32_t area2_sectors_max = handle->master_toc->area_2_toc_2_start + handle->master_toc->area_2_toc_size;
-                uint32_t max_sectors = area2_sectors_max > area1_sectors_max ? area2_sectors_max : area1_sectors_max;
-
-                if (max_sectors <= total_sectors)
-                {
-
-                    fwprintf(stdout, L"\nThe size of sacd is ok (sectors=%d). Size is: %llu bytes, %.3f GB (gigabyte) \n", total_sectors, (uint64_t)total_sectors * SACD_LSN_SIZE, (double)total_sectors * SACD_LSN_SIZE / (1000 * 1000 * 1000));
-                }
-                else
-                {
-                    fwprintf(stdout, L"\nWarning: the reported size (sectors) of sacd is not ok (sectors=%u) < (max_sectors=%u) !\n", total_sectors, max_sectors);
-                }
-
                 // generate the main output folder
-#if defined(WIN32) || defined(_WIN32)
-                char PATH_TRAILING_SLASH[2] = {'\\', '\0'};
-#else
-                char PATH_TRAILING_SLASH[2] = {'/', '\0'};
-#endif
+
                 char *album_path = get_path_disc_album(handle, opts.artist_flag);
                 char *output_dir;
                 size_t album_path_size;
@@ -934,47 +962,50 @@ char * return_current_directory()
 
                 album_path_size = strlen(album_path);
 
+                LOG(lm_main, LOG_NOTICE, ("NOTICE in main:after get_path_disc_album(); album_path=[%s]",album_path));
+
                 if (opts.output_dir != NULL)
                 {
                     size_t size_opt_output_dir = strlen(opts.output_dir);
 
-                    output_dir_size = min(size_opt_output_dir + 1 + album_path_size + 1, MAX_PATH_OUTPUT_SIZE -1);
+                    output_dir_size = min(size_opt_output_dir + 1 + album_path_size + 1, MAX_BUFF_FULL_PATH_LEN-1); // MAX_PATH_OUTPUT_SIZE
                     output_dir = calloc(output_dir_size, sizeof(char));
+                    LOG(lm_main, LOG_NOTICE, ("NOTICE in main:after calloc(); output_dir_size=[%d]",output_dir_size));
 
                     if(output_dir !=NULL)
                     {
-
-                    strcpy(output_dir, opts.output_dir);
-
+                        strncpy(output_dir, opts.output_dir,output_dir_size);
                      
                     #if defined(WIN32) || defined(_WIN32)
                         if (opts.output_dir[size_opt_output_dir - 1] != '\\')
+                            strcat(output_dir, "\\");
                     #else
-                        if (opts.output_dir[size_opt_output_dir - 1] != '/') 
+                        if (opts.output_dir[size_opt_output_dir - 1] != '/')
+                            strcat(output_dir, "/"); 
                     #endif
-                            strcat(output_dir, PATH_TRAILING_SLASH);
+                            
 
                         if( album_path_size + size_opt_output_dir + 1 < output_dir_size)
-                            strncat(output_dir, album_path, album_path_size);
+                            strcat(output_dir, album_path);
                     }     
 
                 }
                 else
                 {
-                    output_dir_size = min(album_path_size + 1, MAX_PATH_OUTPUT_SIZE);
-                    output_dir = calloc(output_dir_size, sizeof(char));
-                    if(output_dir != NULL)
-                      strcat(output_dir, album_path);
+                        output_dir_size = min(album_path_size + 1, MAX_BUFF_FULL_PATH_LEN); //MAX_PATH_OUTPUT_SIZE
+                        output_dir = calloc(output_dir_size, sizeof(char));
+                        if(output_dir != NULL)
+                        strcat(output_dir, album_path);
                 }
 
 
                 free(album_path);
-                LOG(lm_main, LOG_NOTICE, ("NOTICE in main: after get_path_disc_album()...output_dir: %s", output_dir));
+                LOG(lm_main, LOG_NOTICE, ("NOTICE in main: after get_path_disc_album()...output_dir=[%s]", output_dir));
 
                 if (opts.export_cue_sheet)  // in fact,  export XML metadata at first
                 {
 
-                    int ret_mkdir = recursive_mkdir(output_dir, opts.output_dir, 0774);
+                    int ret_mkdir = recursive_mkdir(output_dir, opts.output_dir, 0777);
 
                     if (ret_mkdir != 0)
                     {
@@ -994,18 +1025,17 @@ char * return_current_directory()
                         fwprintf(stderr, L"\n ERROR: cannot create get_unique_filename XML for metadata (==NULL) !!\n");
                     else
                     {
-#if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
-                        char filename_long[1024];
-                        memset(filename_long, '\0', sizeof(filename_long));
-                        strcpy(filename_long, "\\\\?\\");
-                        strncat(filename_long, metadata_file_path_unique, min(1016, strlen(metadata_file_path_unique)));
-#endif
                         wchar_t *wide_filename;
                         CHAR2WCHAR(wide_filename, metadata_file_path_unique);
                         fwprintf(stdout, L"\n\n Exporting metadata in XML file: [%ls] ... \n", wide_filename);
                         free(wide_filename);
 
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
+                        char filename_long[MAX_BUFF_FULL_PATH_LEN];
+                        memset(filename_long, '\0', sizeof(filename_long));
+                        strcpy(filename_long, "\\\\?\\");
+                        strncat(filename_long, metadata_file_path_unique, MAX_BUFF_FULL_PATH_LEN-8);
+
                         write_metadata_xml(handle, filename_long);
 
 #else
@@ -1029,7 +1059,7 @@ char * return_current_directory()
                     {
                         // not exists, then create it
 
-                        int ret_mkdir = recursive_mkdir(output_dir, opts.output_dir, 0774);
+                        int ret_mkdir = recursive_mkdir(output_dir, opts.output_dir, 0777);
 
                         if (ret_mkdir != 0)
                         {
@@ -1074,10 +1104,8 @@ char * return_current_directory()
 
                         wchar_t *wide_filename;
                         CHAR2WCHAR(wide_filename, file_path_iso_unique);
-                        fwprintf(stdout, L"\n Exporting ISO output in file: %ls\n", wide_filename);
+                        fwprintf(stdout, L"\n Exporting ISO output in file: [%ls] ... \n", wide_filename);
                         free(wide_filename);
-
-                        LOG(lm_main, LOG_NOTICE, ("NOTICE in main: exporting ISO, before scarletbook_output_enqueue_raw_sectors()...file_path_iso_unique: %s; total_sectors:%d;", file_path_iso_unique,total_sectors));
 
                         scarletbook_output_enqueue_raw_sectors(output, 0, total_sectors, file_path_iso_unique, "iso");
 
@@ -1138,7 +1166,7 @@ char * return_current_directory()
 
                             wchar_t *wide_filename;
                             CHAR2WCHAR(wide_filename, file_path_dsdiff_unique);
-                            fwprintf(stdout, L"\n Exporting DFF edit master output in file: %ls\n", wide_filename);
+                            fwprintf(stdout, L"\n Exporting DFF edit master output in file: [%ls] ... \n", wide_filename);
                             free(wide_filename);
 
                             output = scarletbook_output_create(handle, handle_status_update_track_callback, handle_status_update_progress_callback, safe_fwprintf);
@@ -1192,11 +1220,11 @@ char * return_current_directory()
                             CHAR2WCHAR(wide_folder, output_dir_dsd);
                             if (opts.output_dsf)
                             {
-                                fwprintf(stdout, L"\n Exporting DSF output in folder: %ls\n", wide_folder);
+                                fwprintf(stdout, L"\n Exporting DSF output in folder: [%ls] ... \n", wide_folder);
                             }
                             else
                             {
-                                fwprintf(stdout, L"\n Exporting DSDIFF output in folder: %ls\n", wide_folder);
+                                fwprintf(stdout, L"\n Exporting DSDIFF output in folder: [%ls]  ... \n", wide_folder);
                             }
                             free(wide_folder);
 
@@ -1259,7 +1287,7 @@ char * return_current_directory()
                                     if ((first_track < handle->area[area_idx].area_toc->track_count)&&
                                         (last_track < handle->area[area_idx].area_toc->track_count) )
                                     {
-                                        char conc_string[10];
+                                        char conc_string[32];
                                         snprintf(conc_string, sizeof(conc_string), "[%02d-%02d]",first_track + 1, last_track + 1);
 
                                         musicfilename = get_music_filename(handle, area_idx, first_track, conc_string, opts.performer_flag);
@@ -1325,23 +1353,37 @@ char * return_current_directory()
 
             }  // end if handle
 			else
+            {
+                fwprintf(stdout, L"\nErrors reading sacd data!!\n");
+                LOG(lm_main, LOG_ERROR, ("Error in main(), reading sacd data!!"));
 				exit_main_flag=-1;
+            }
             
 			sacd_close(sacd_reader);
         }
 		else
+        {
+            fwprintf(stdout, L"\nErrors opening sacd !!\n");
+            LOG(lm_main, LOG_ERROR, ("Error in main(), opening sacd !!"));
 			exit_main_flag=-1;
+        }
 
         
 
 exit_main:
     fwprintf(stdout, L"\nProgram terminates!\n");
+    LOG(lm_main, LOG_NOTICE, ("NOTICE in main:Program terminates!"));
 #ifndef _WIN32
-            freopen(0, "w", stdout);
+            if(freopen(NULL, "w", stdout) == NULL)
+            {
+                fwprintf(stdout, L"\nError in main: cannot change the mode of the stream to w (re-initialize) !\n");
+                LOG(lm_main, LOG_ERROR, ("Error in main: cannot change the mode of the stream to w (re-initialize)!"));
+            }
 #endif
         if (fwide(stdout, -1) >= 0)
         {
-            fwprintf(stderr, L"ERROR: Output not set to byte oriented.\n");
+            fprintf(stderr, "ERROR in main: Output not set to byte oriented!\n");
+            LOG(lm_main, LOG_ERROR, ("Error in main: Output not set to byte oriented!"));
         }
     }
 exit_main_1:
