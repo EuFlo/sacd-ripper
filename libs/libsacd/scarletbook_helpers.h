@@ -28,6 +28,11 @@
 extern "C" {
 #endif
 
+#define MAX_DISC_ARTIST_LEN 40
+#define MAX_ALBUM_TITLE_LEN 100
+#define MAX_TRACK_TITLE_LEN 120
+#define MAX_TRACK_ARTIST_LEN 40
+
 /**
  * helper functions..
  */
