@@ -893,24 +893,34 @@ int UnpackDSTframe(ebunch*  D,
                    uint8_t* DSDdataframe)
 {
   int   Dummy;
+  int ret = DSTErr_NoError;
 
   /* fill internal buffer with DSTframe */
   FillBuffer(&D->S, DSTdataframe, D->FrameHdr.CalcNrOfBytes);
 
   /* interpret DST header byte */
   if (FIO_BitGetIntUnsigned(&D->S, 1, &D->FrameHdr.DSTCoded))
-    return DSTErr_NegativeBitAllocation;
+  {
+    ret = DSTErr_NegativeBitAllocation;
+    goto LAB_final;
+  }
 
   if (D->FrameHdr.DSTCoded == 0)
   {
     if (FIO_BitGetIntUnsigned(&D->S, 1, &Dummy))	/* Was &D->DstXbits.Bit, but it was never used */
-      return DSTErr_NegativeBitAllocation;
+    {  ret = DSTErr_NegativeBitAllocation;
+      goto LAB_final;
+    }
 
     if (FIO_BitGetIntUnsigned(&D->S, 6, &Dummy))
-      return DSTErr_NegativeBitAllocation;
+    {  ret = DSTErr_NegativeBitAllocation;
+      goto LAB_final;
+    }
 
     if (Dummy != 0)
-      return DSTErr_InvalidStuffingPattern;
+    {  ret = DSTErr_InvalidStuffingPattern;
+      goto LAB_final;
+    }
 
     /* Read DSD data and put in output stream */
     ReadDSDframe(&D->S, D->FrameHdr.MaxFrameLen, D->FrameHdr.NrOfChannels, DSDdataframe);
@@ -920,23 +930,37 @@ int UnpackDSTframe(ebunch*  D,
     int error;
 
     if ((error = ReadSegmentData(&D->S, &D->FrameHdr)) != 0)
-      return error;
+    {  ret = error;
+      goto LAB_final;
+    }
 
     if ((error = ReadMappingData(&D->S, &D->FrameHdr)) != 0)
-      return error;
+    {  ret = error;
+      goto LAB_final;
+    }
 
     if ((error = ReadFilterCoefSets(&D->S, D->FrameHdr.NrOfChannels, &D->FrameHdr, &D->StrFilter)) != 0)
-      return error;
+    {  ret = error;
+      goto LAB_final;
+    }
 
     if ((error = ReadProbabilityTables(&D->S, &D->FrameHdr, &D->StrPtable, D->P_one)) != 0)
-      return error;
+    {  ret = error;
+      goto LAB_final;
+    }
 
     D->ADataLen = D->FrameHdr.CalcNrOfBits - get_in_bitcount(&D->S);
     ReadArithmeticCodedData(&D->S, D->ADataLen, D->AData);
 
     if ((D->ADataLen > 0) && (D->AData[0] != 0))
-      return DSTErr_InvalidArithmeticCode;
+    {  ret = DSTErr_InvalidArithmeticCode;
+      goto LAB_final;
+    }
   }
 
-  return DSTErr_NoError;
+LAB_final:
+
+  DeleteBuffer(&D->S);
+
+  return ret;
 }
