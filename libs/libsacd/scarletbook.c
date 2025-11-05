@@ -31,8 +31,9 @@ const char *character_set[] =
     "GB2312.1980-0",
     "BIG5",
     "ISO-8859-1",
+    NULL
 };
-
+// see #define MAX_GENRE_COUNT 29  ??? here are 30 elements !!!
 const char *album_genre[] =
 {
     "Not used"
@@ -65,13 +66,15 @@ const char *album_genre[] =
     , "Spoken Word"
     , "World Music"
     , "Blues"
+    , NULL
 };
-
+// see #define MAX_CATEGORY_COUNT 3
 const char *album_category[] =
 {
     "Not used"
     , "General"
     , "Japanese"
+    , NULL
 };
 
 
