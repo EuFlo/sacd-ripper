@@ -31,6 +31,8 @@
 #include <unistd.h>
 #include <wchar.h>
 
+#include <scarletbook_helpers.h>
+
 #include "logging.h"
 #include "fileutils.h"
 #include "charset.h"
@@ -109,8 +111,8 @@ https://www.quora.com/What-is-the-longest-file-path-allowed-for-Linux
 
 */
 
-#define MAX_BUFF_FULL_PATH_LEN 1024
-#define MAX_FILENAME_LEN 255
+//#define MAX_BUFF_FULL_PATH_LEN 1024  -- moved to fileutils.h
+//#define MAX_FILENAME_LEN 255
 
 
 // construct a filename path from various parts/components 
@@ -130,10 +132,10 @@ char *make_filename(const char *path, const char *dir, const char *filename, con
 
     memset(string_buf,0,sizeof(string_buf));
 
-    if (path)
+    if (path != NULL)
     {
-        strncpy(string_buf, path, min(strlen(path), sizeof(string_buf) - 5)); // (-4 => making room for dot + extension!!!)
-        pos += min(strlen(path), sizeof(string_buf) - 5);
+        strncpy(string_buf, path, MAX_BUFF_FULL_PATH_LEN - 5); // (-4 => making room for dot + extension!!!)
+        pos += min(strlen(path), MAX_BUFF_FULL_PATH_LEN - 5);
 #if defined(WIN32) || defined(_WIN32)
         if(string_buf[pos-1] != '\\'){
             string_buf[pos] = '\\';
@@ -147,10 +149,10 @@ char *make_filename(const char *path, const char *dir, const char *filename, con
 #endif
         
     }
-    if (dir)
+    if (dir != NULL)
     {       
-        strncpy(string_buf+pos,dir,min(strlen(dir), sizeof(string_buf) -pos-5));
-        pos += min(strlen(dir), sizeof(string_buf) - pos - 5);
+        strncpy(string_buf+pos,dir,MAX_BUFF_FULL_PATH_LEN - pos - 5);
+        pos += min((int)strlen(dir), MAX_BUFF_FULL_PATH_LEN - pos - 5);
 #if defined(WIN32) || defined(_WIN32)
         if (string_buf[pos - 1] != '\\')
         {
@@ -169,23 +171,23 @@ char *make_filename(const char *path, const char *dir, const char *filename, con
 
     sanitize_filepath(string_buf);
 
-    if (filename)
+    if (filename != NULL)
     {
         char filename_duplicate[MAX_FILENAME_LEN];
         memset(filename_duplicate, 0, sizeof(filename_duplicate));
-        strncpy(filename_duplicate, filename, min(strlen(filename), sizeof(filename_duplicate) - 1));
+        strncpy(filename_duplicate, filename, MAX_FILENAME_LEN - 1);
         sanitize_filename(filename_duplicate);
 
-        strncpy(string_buf + pos, filename_duplicate, min(strlen(filename_duplicate), sizeof(string_buf) - pos - 5)); 
-        pos += min(strlen(filename_duplicate), sizeof(string_buf) - pos - 5);
+        strncpy(string_buf + pos, filename_duplicate,MAX_BUFF_FULL_PATH_LEN - pos - 5); 
+        pos += min((int)strlen(filename_duplicate), MAX_BUFF_FULL_PATH_LEN - pos - 5);
     }
 
-    if (extension)
+    if (extension != NULL)
     {
         string_buf[pos] = '.';
         pos++;
-        strncpy(string_buf + pos, extension, min(strlen(extension), sizeof(string_buf) - pos - 1));
-        pos += min(strlen(extension), sizeof(string_buf) - pos - 1);
+        strncpy(string_buf + pos, extension, MAX_BUFF_FULL_PATH_LEN  - pos - 1);
+        pos += min((int)strlen(extension), MAX_BUFF_FULL_PATH_LEN  - pos - 1);
     }
 
     ret = strdup(string_buf);
@@ -214,10 +216,11 @@ char * parse_format(const char * format, int tracknum, const char * year, const 
     int      len   = 0;
     char     * ret = NULL;
     int      pos   = 0;
+    unsigned len_format = (unsigned)strlen(format);
 
-    for (i = 0; i < strlen(format); i++)
+    for (i = 0; i < len_format; i++)
     {
-        if ((format[i] == '%') && (i + 1 < strlen(format)))
+        if ((format[i] == '%') && (i + 1 < len_format))
         {
             switch (format[i + 1])
             {
@@ -254,28 +257,32 @@ char * parse_format(const char * format, int tracknum, const char * year, const 
         }
     }
 
-    ret = malloc(sizeof(char) * (len + 1));
-    if (ret == NULL)
-        LOG(lm_main, LOG_ERROR, ("malloc(sizeof(char) * (len+1)) failed. Out of memory."));
+    if(len >= MAX_BUFF_FULL_PATH_LEN) len = MAX_BUFF_FULL_PATH_LEN - 1;
+    LOG(lm_main, LOG_NOTICE, ("NOTICE in fileutils: parse_format(); len=[%d]",len));
 
-    for (i = 0; i < strlen(format); i++)
+    //ret = calloc(MAX_BUFF_FULL_PATH_LEN,1); // calloc(len+1, sizeof(char));
+    ret = calloc(MAX_BUFF_FULL_PATH_LEN,1);
+    if (ret == NULL)
+        LOG(lm_main, LOG_ERROR, ("malloc(len+1) failed. Out of memory."));
+
+    for (i = 0; i <  len_format; i++)
     {
-        if ((format[i] == '%') && (i + 1 < strlen(format)))
+        if ((format[i] == '%') && (i + 1 <  len_format))
         {
             switch (format[i + 1])
             {
             case 'A':
                 if (artist)
                 {
-                    strncpy(&ret[pos], artist, strlen(artist));
-                    pos += strlen(artist);
+                    strncpy(&ret[pos], artist,MAX_DISC_ARTIST_LEN);
+                    pos += min((int)strlen(artist),MAX_DISC_ARTIST_LEN);
                 }
                 break;
             case 'L':
                 if (album)
                 {
-                    strncpy(&ret[pos], album, strlen(album));
-                    pos += strlen(album);
+                    strncpy(&ret[pos], album, MAX_ALBUM_TITLE_LEN);
+                    pos += min((int)strlen(album),MAX_ALBUM_TITLE_LEN);
                 }
                 break;
             case 'N':
@@ -289,15 +296,15 @@ char * parse_format(const char * format, int tracknum, const char * year, const 
             case 'Y':
                 if (year)
                 {
-                    strncpy(&ret[pos], year, strlen(year));
-                    pos += strlen(year);
+                    strncpy(&ret[pos], year, 4);
+                    pos += min((int)strlen(year),4);
                 }
                 break;
             case 'T':
                 if (title)
                 {
-                    strncpy(&ret[pos], title, strlen(title));
-                    pos += strlen(title);
+                    strncpy(&ret[pos], title, MAX_TRACK_TITLE_LEN);
+                    pos += min((int)strlen(title),MAX_TRACK_TITLE_LEN);
                 }
                 break;
             case '%':
@@ -361,9 +368,9 @@ int recursive_mkdir(char* path_and_name,char * base_dir, mode_t mode)
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
             {
                 char win_path_and_name_long[MAX_BUFF_FULL_PATH_LEN];
-                memset(win_path_and_name_long, '\0', MAX_BUFF_FULL_PATH_LEN);
+                memset(win_path_and_name_long, '\0', sizeof(win_path_and_name_long));
                 strcpy(win_path_and_name_long, "\\\\?\\");
-                strncat(win_path_and_name_long, path_and_name, min(MAX_BUFF_FULL_PATH_LEN-8, strlen(path_and_name)));
+                strncat(win_path_and_name_long, path_and_name, MAX_BUFF_FULL_PATH_LEN-8);
 
                 wchar_t *wide_path_and_name = (wchar_t *)charset_convert(win_path_and_name_long, strlen(win_path_and_name_long), "UTF-8", "UCS-2-INTERNAL");
                 rc = _wmkdir(wide_path_and_name);
@@ -392,9 +399,9 @@ int recursive_mkdir(char* path_and_name,char * base_dir, mode_t mode)
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
     {
         char win_path_and_name_long[MAX_BUFF_FULL_PATH_LEN];
-        memset(win_path_and_name_long, '\0', MAX_BUFF_FULL_PATH_LEN);
+        memset(win_path_and_name_long, '\0', sizeof(win_path_and_name_long));
         strcpy(win_path_and_name_long, "\\\\?\\");
-        strncat(win_path_and_name_long, path_and_name, min(MAX_BUFF_FULL_PATH_LEN-8, strlen(path_and_name)));
+        strncat(win_path_and_name_long, path_and_name, MAX_BUFF_FULL_PATH_LEN-8);
 
         wchar_t *wide_path_and_name = (wchar_t *)charset_convert(win_path_and_name_long, strlen(win_path_and_name_long), "UTF-8", "UCS-2-INTERNAL");
         rc = _wmkdir(wide_path_and_name);
@@ -423,17 +430,17 @@ char *get_unique_path(char *dir, char *file, const char *ext)
     unsigned int i = 0;
     struct stat stat_file;
 
-    file_new = (char *)malloc((strlen(file)+16)*sizeof(char));
+    file_new = (char *)malloc((strlen(file)+16));
     strcpy(file_new, file);
     for(i = 0; i < 64; i ++){
         if(i){
             snprintf(file_new, strlen(file)+8, "%s (%d)", file, i);
         }
-        path = make_filename(dir, 0, file_new, ext);
+        path = make_filename(dir, NULL, file_new, ext);
         if (stat_wrap(path, &stat_file) != 0)       
         {
                 free(path);
-                path = make_filename(dir, 0, file_new, ext);
+                path = make_filename(dir, NULL, file_new, ext);
                 break;
         }
         free(path);
@@ -457,8 +464,6 @@ char * get_unique_filename(char *dev,char *dir, char *file, char *ext)
     struct stat stat_file;
     int file_exists=0, count = 1;
 
-    int len = strlen(file) + 10;
-
     char *total_path = make_filename(dev, dir, file, ext);
 
     file_exists = (stat_wrap(total_path, &stat_file) == 0) ? 1 :0;
@@ -466,9 +471,14 @@ char * get_unique_filename(char *dev,char *dir, char *file, char *ext)
     while (file_exists==1)
     {
         free(total_path);
-        char *file_copy = (char *) calloc(len, sizeof(char));
-        snprintf(file_copy, len, "%s (%d)", file, count++);
+
+        int len_file_copy = strlen(file) + 10;
+        char *file_copy = (char *) calloc(len_file_copy, sizeof(char));
+        snprintf(file_copy, len_file_copy, "%s (%d)", file, count++);
+        
         total_path = make_filename(dev, dir, file_copy, ext);
+        free(file_copy);
+        
         file_exists = (stat_wrap(total_path, &stat_file) == 0)? 1:0;
 
         if (count > 20) break; // loop must be stoped somewhere
