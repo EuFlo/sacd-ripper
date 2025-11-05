@@ -73,7 +73,7 @@ Changes:
 /*============================================================================*/
 
 int GetDSTDataPointer      (StrData* SD, uint8_t** pBuffer);
-int ResetReadingIndex      (StrData* SD);
+void ResetReadingIndex     (StrData* SD);
 int ReadNextBitFromBuffer  (StrData* SD, uint8_t* pBit);
 int ReadNextNBitsFromBuffer(StrData* SD, int32_t* pBits, int32_t NrBits);
 int ReadNextByteFromBuffer (StrData* SD, uint8_t* pByte);
@@ -87,7 +87,7 @@ int FIO_BitGetShortSigned(StrData* SD, int Len, short *x);
 int get_in_bitcount(StrData* SD);
 
 int CreateBuffer(StrData* SD, int32_t Size);
-int DeleteBuffer(StrData* SD);
+void DeleteBuffer(StrData* SD);
 
 
 #endif /* !defined(__DSTDATA_H_INCLUDED) */
