@@ -26,11 +26,16 @@
 #include <unistd.h>
 #endif /* _MSC_VER */
 
+#ifndef NDEBUG
 #define CHECK_VALUE(arg)                                                     \
     if (!(arg)) {                                                            \
         fprintf(stderr, "\n*** libsacdread: CHECK_VALUE failed in %s:%i ***" \
                 "\n*** for %s ***\n\n",                                      \
                 __FILE__, __LINE__, # arg);                                  \
     }
+#else
+#define CHECK_VALUE(arg)    (void) (arg)
+
+#endif    
 
 #endif /* SACDREAD_INTERNAL_H */
