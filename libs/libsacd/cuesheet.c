@@ -30,6 +30,7 @@
 #include <charset.h>
 #include <version.h>
 #include <utils.h>
+#include <fileutils.h>
 
 #include "cuesheet.h"
 #include "scarletbook_helpers.h"
@@ -49,10 +50,10 @@ int write_cue_sheet(scarletbook_handle_t *handle, const char *filename, int area
    FILE *fd;
 
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
-    char filename_long[1024];
-	memset(filename_long, '\0', sizeof(filename_long));
+    char filename_long[MAX_BUFF_FULL_PATH_LEN];
+	memset(filename_long, '\0', MAX_BUFF_FULL_PATH_LEN);
     strcpy(filename_long,"\\\\?\\");
-    strncat(filename_long,cue_filename, min(1016, strlen(cue_filename)));
+    strncat(filename_long,cue_filename, MAX_BUFF_FULL_PATH_LEN - 8);
 
     wchar_t *wide_filename;
     wide_filename = (wchar_t *)charset_convert(filename_long, strlen(filename_long), "UTF-8", "UCS-2-INTERNAL");
