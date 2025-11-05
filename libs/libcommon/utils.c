@@ -33,12 +33,12 @@
 
 char *substr(const char *pstr, int start, int numchars)
 {
-    static char pnew[512];
-    wchar_t *wc;
+    static char p_new_out[1024];
+    wchar_t *p_wchar_in;
     char *wchar_type;
     char *c;
-    memset(pnew, 0, sizeof(pnew));
-    if (numchars < (int) sizeof(pnew))
+    memset(p_new_out, 0, sizeof(p_new_out));
+    if (numchars < (int) sizeof(p_new_out))
     {
 #ifdef _WIN32
         wchar_type = (sizeof(wchar_t) == 2) ? 
@@ -46,16 +46,14 @@ char *substr(const char *pstr, int start, int numchars)
 #else
         wchar_type = "WCHAR_T";
 #endif
-        wc = (wchar_t *) charset_convert((char *) pstr + start, 
-                numchars, "UTF-8", wchar_type);
-        c = charset_convert((char *) wc, 
-                wcslen(wc) * sizeof(wchar_t), wchar_type, "UTF-8");
-        strcpy(pnew, c);
-        free(wc);
+        p_wchar_in = (wchar_t *) charset_convert((char *) pstr + start, numchars, "UTF-8", wchar_type);
+        c = charset_convert((char *) p_wchar_in, wcslen(p_wchar_in) * sizeof(wchar_t), wchar_type, "UTF-8");
+        strncpy(p_new_out, c, 256);
+        free(p_wchar_in);
         free(c);
-        return pnew;
+        return p_new_out;
     }
-    return pnew;
+    return p_new_out;
 }
 
 char *str_replace(const char *src, const char *from, const char *to)
@@ -63,7 +61,7 @@ char *str_replace(const char *src, const char *from, const char *to)
     size_t size    = strlen(src) + 1;
     size_t fromlen = strlen(from);
     size_t tolen   = strlen(to);
-    char *value = malloc(size);
+    char *value = calloc(size,sizeof(char));
     char *dst = value;
     if (value != NULL)
     {
