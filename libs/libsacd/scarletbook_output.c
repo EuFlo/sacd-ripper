@@ -44,18 +44,12 @@
 #include <charset.h>
 #include <utils.h>
 #include <logging.h>
+#include <fileutils.h>
 
 #include "scarletbook_output.h"
 #include "scarletbook_read.h"
 #include "sacd_reader.h"
 
-#if defined(WIN32) || defined(_WIN32)
-
-#define CHAR2WCHAR(dst, src) dst = (wchar_t *)charset_convert(src, strlen(src), "UTF-8", "UCS-2-INTERNAL")
-#else
-
-#define CHAR2WCHAR(dst, src) dst = (wchar_t *)charset_convert(src, strlen(src), "UTF-8", "WCHAR_T")
-#endif
 
 #define WRITE_CACHE_SIZE 1 * 1024 * 1024
 
@@ -341,10 +335,10 @@ static int create_output_file(scarletbook_output_format_t *ft)
     int result;
 
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
-    char filename_long[1024];
-	memset(filename_long, '\0', sizeof(filename_long));
+    char filename_long[MAX_BUFF_FULL_PATH_LEN];
+	memset(filename_long, '\0', MAX_BUFF_FULL_PATH_LEN);
     strcpy(filename_long,"\\\\?\\");
-    strncat(filename_long,ft->filename, min(1016, strlen(ft->filename)));
+    strncat(filename_long,ft->filename, MAX_BUFF_FULL_PATH_LEN - 8);
 	
     wchar_t *wide_filename;
 	wide_filename = (wchar_t *)charset_convert(filename_long, strlen(filename_long), "UTF-8", "UCS-2-INTERNAL");
