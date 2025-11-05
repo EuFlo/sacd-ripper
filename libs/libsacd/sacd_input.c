@@ -382,7 +382,7 @@ static sacd_input_t sacd_net_input_open(const char *target)
 
     output = pb_ostream_from_socket((p_socket)&dev->fd);
 
-    request.type = ServerRequest_Type_DISC_OPEN;
+    request.type = ServerRequest_Type_DISC_OPEN;request.sector_count=0;request.sector_offset=0;
 
     if (!pb_encode(&output, ServerRequest_fields, &request))
     {
@@ -431,7 +431,7 @@ static int sacd_net_input_close(sacd_input_t dev)
         pb_ostream_t output = pb_ostream_from_socket((p_socket)&dev->fd);
         uint8_t zero = 0;
 
-        request.type = ServerRequest_Type_DISC_CLOSE;
+        request.type = ServerRequest_Type_DISC_CLOSE;request.sector_count=0;request.sector_offset=0;
         if (!pb_encode(&output, ServerRequest_fields, &request))
         {
             goto error;
@@ -481,7 +481,7 @@ static uint32_t sacd_net_input_total_sectors(sacd_input_t dev)
         pb_ostream_t output = pb_ostream_from_socket((p_socket)&dev->fd);
         uint8_t zero = 0;
 
-        request.type = ServerRequest_Type_DISC_SIZE;
+        request.type = ServerRequest_Type_DISC_SIZE;request.sector_count=0;request.sector_offset=0;
 
         if (!pb_encode(&output, ServerRequest_fields, &request))
         {
