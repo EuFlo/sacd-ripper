@@ -91,6 +91,11 @@ endif ()
 
 file(GLOB libcommon_headers ../../libs/libcommon/*.h)
 file(GLOB libcommon_sources ../../libs/libcommon/*.c)
+# avoid ISO C empty translation unit errors
+list(REMOVE_ITEM libcommon_headers "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libcommon/usocket.h")
+list(REMOVE_ITEM libcommon_sources "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libcommon/usocket.c")
+list(REMOVE_ITEM libcommon_headers "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libcommon/wsocket.h")
+list(REMOVE_ITEM libcommon_sources "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libcommon/wsocket.c")
 source_group(libcommon FILES ${libcommon_headers} ${libcommon_sources})
 
 file(GLOB libdstdec_headers ../../libs/libdstdec/*.h)
@@ -103,6 +108,13 @@ source_group(libid3 FILES ${libid3_headers} ${libid3_sources})
 
 file(GLOB libsacd_headers ../../libs/libsacd/*.h)
 file(GLOB libsacd_sources ../../libs/libsacd/*.c)
+# avoid ISO C empty translation unit errors
+list(REMOVE_ITEM libsacd_headers "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libsacd/dst_decoder_ps3.h")
+list(REMOVE_ITEM libsacd_sources "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libsacd/dst_decoder_ps3.c")
+list(REMOVE_ITEM libsacd_headers "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libsacd/ioctl.h")
+list(REMOVE_ITEM libsacd_sources "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libsacd/ioctl.c")
+list(REMOVE_ITEM libsacd_headers "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libsacd/sac_accessor.h")
+list(REMOVE_ITEM libsacd_sources "${CMAKE_CURRENT_SOURCE_DIR}/../../libs/libsacd/sac_accessor.c")
 source_group(libsacd FILES ${libsacd_headers} ${libsacd_sources})
 
 file(GLOB main_headers ./*.h)
