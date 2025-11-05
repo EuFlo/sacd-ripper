@@ -97,15 +97,15 @@ int GetDSTDataPointer (StrData* SD, uint8_t** pBuffer)
  * ResetReadingIndex
  ***********************************************************************/
 
-int ResetReadingIndex(StrData* SD)
+void ResetReadingIndex(StrData* SD)
 {
-  int hr = 0;
+
 
   SD->BitPosition = 0;
   SD->ByteCounter = 0;
   SD->DataByte    = 0;
 
-  return (hr);
+
 }
 
 
@@ -120,11 +120,11 @@ int CreateBuffer(StrData* SD, int32_t Size)
   SD->TotalBytes = Size;
 
   /* delete buffer if exist */
-  if (SD->pDSTdata != NULL)
-  {
-    free( SD->pDSTdata );
-    SD->pDSTdata = NULL;
-  }
+  // if (SD->pDSTdata != NULL)
+  // {
+  //   free( SD->pDSTdata );
+  //   SD->pDSTdata = NULL;
+  // }
 
   /* create new buffer for data */
   SD->pDSTdata = (uint8_t*) malloc (Size);
@@ -145,20 +145,21 @@ int CreateBuffer(StrData* SD, int32_t Size)
  * DeleteBuffer
  ***********************************************************************/
 
-int DeleteBuffer(StrData* SD)
+void DeleteBuffer(StrData* SD)
 {
-  int hr = 0;
+  
 
   SD->TotalBytes = 0;
 
   if (SD->pDSTdata != NULL)
   {
-    hr = -1;
+    
+    free(SD->pDSTdata);
   }
 
   ResetReadingIndex(SD);
 
-  return (hr);
+ 
 }
 
 
