@@ -69,7 +69,7 @@
 #define SUPPORTED_VERSION_MAJOR        1
 #define SUPPORTED_VERSION_MINOR        20
 
-#define MAX_GENRE_COUNT                29
+#define MAX_GENRE_COUNT                30 // was 29
 #define MAX_CATEGORY_COUNT             3
 
 #define MAX_PROCESSING_BLOCK_SIZE      512
