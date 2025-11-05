@@ -30,6 +30,9 @@ typedef int mode_t;
 #include <sys/stat.h>
 #endif
 
+#define MAX_BUFF_FULL_PATH_LEN 4096
+#define MAX_FILENAME_LEN 255
+
 // substitute various items into a formatted string (similar to printf)
 //
 // format - the format of the filename
