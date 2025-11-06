@@ -96,8 +96,7 @@ struct id3_framehdr {
 #define ID3_FHFLAG_GROUP	0x0020
 
 
-#define DEBUG_ID3
-#ifdef DEBUG_ID3
+#ifndef NDEBUG
 #define id3_error(id3, error)		\
   (void) ( id3->id3_error_msg = error,	\
            printf( "Error %s, line %d: %s\n", __FILE__, __LINE__, error ) )
