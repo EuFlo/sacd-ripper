@@ -1,6 +1,6 @@
 # CMake build file for SACD Extract
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.6...3.5)
 
 # Force to compile for Mac OS X 10.13. target (if you want the app run on all OS X versions).
 # Without this adding, if build is made on a MacOS 10.15 or newer, then the app will not run on systems older than 10.15.
@@ -70,7 +70,7 @@ include_directories("../../libs/libdstdec")
 include_directories("../../libs/libid3")
 include_directories("../../libs/libsacd")
 
-message(STATUS "libmxl2 ${LIBXML2_LIBRARIES}")
+
 find_package(LibXml2 REQUIRED)
 
 # Extra flags for GCC
@@ -80,7 +80,7 @@ if (CMAKE_COMPILER_IS_GNUCC OR (CMAKE_C_COMPILER_ID MATCHES "Clang"))
     add_definitions(
         -pipe
         -Wall -Wextra -Wcast-align -Wpointer-arith
-        -Wno-unused-parameter `xml2-config --cflags --libs`)
+        -Wno-unused-parameter `xml2-config --cflags`)
  if (MINGW64 MATCHES "YES")
      add_definitions(
         -fno-stack-protector)
@@ -97,7 +97,7 @@ endif ()
 
 if(NOT CMAKE_BUILD_TYPE_UPPER STREQUAL "DEBUG")
   if (CMAKE_COMPILER_IS_GNUCC OR (CMAKE_C_COMPILER_ID MATCHES "Clang"))
-    add_definitions(-O3 -s)
+    add_definitions(-O3)
   endif ()
 
 else()
@@ -148,14 +148,13 @@ add_executable(sacd_extract
     )
 
 if(WIN32)
-    set(CMAKE_C_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIRARIES} -lpthread -lws2_32 -liconv -lxml2 -static")
+    add_definitions(-D_FILE_OFFSET_BITS=64 -DUNICODE -D_UNICODE -DIN_LIBXML)
     target_compile_options(${PROJECT_NAME} PRIVATE -municode)
-    target_link_libraries(${PROJECT_NAME} -municode)
-    add_definitions(-D_FILE_OFFSET_BITS=64)
-    add_definitions(-DUNICODE -D_UNICODE -DIN_LIBXML)
+    target_link_libraries(${PROJECT_NAME} -municode -static -lpthread -lws2_32 -liconv -lxml2 -lbcrypt)
 elseif(APPLE)
-  set(CMAKE_C_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIRARIES} -liconv -lpthread -lxml2")
+    add_definitions(-D_FILE_OFFSET_BITS=64)
+    target_link_libraries(${PROJECT_NAME} -liconv -lxml2)
 else()
-  add_definitions(-D_FILE_OFFSET_BITS=64)
-  set(CMAKE_C_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIRARIES} -lpthread -lxml2")
+    add_definitions(-D_FILE_OFFSET_BITS=64)
+    target_link_libraries(${PROJECT_NAME} -lxml2)
 endif()
