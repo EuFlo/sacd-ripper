@@ -375,7 +375,7 @@ error:
 
 static inline int close_output_file(scarletbook_output_format_t * ft)
 {
-    int result;
+    int result=0;
 	
 	if(ft->fd != NULL){
 		result = ft->handler.stopwrite ? (*ft->handler.stopwrite)(ft) : 0;
