@@ -27,7 +27,7 @@
 #elif defined(WIN32)
 #include <io.h>
 #endif
-
+#include <logging.h>
 #include "scarletbook_output.h"
 
 static int iso_write_frame(scarletbook_output_format_t *ft, const uint8_t *buf, size_t len)
@@ -35,7 +35,7 @@ static int iso_write_frame(scarletbook_output_format_t *ft, const uint8_t *buf, 
     size_t result = fwrite(buf, 1, len * SACD_LSN_SIZE, ft->fd);
 	if(result != len * SACD_LSN_SIZE)
 	{ 		        
-		//LOG(lm_main, LOG_ERROR, ("iso_write_frame(): error writting in file.") );
+		LOG(lm_main, LOG_ERROR, ("ERROR in iso_write_frame(): error writting in file.") );
 		return -1;               				
 	}
 	 return (int)result;
