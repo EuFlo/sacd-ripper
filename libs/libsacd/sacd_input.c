@@ -150,7 +150,8 @@ static sacd_input_t sacd_dev_input_open(const char *target)
     /* Open the device */
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
     wchar_t *wide_filename;  
-	wide_filename = (wchar_t *)charset_convert(target, strlen(target),"UTF-8",  "UCS-2-INTERNAL" );
+	
+    CHAR2WCHAR(wide_filename, target);
     dev->fd = _wopen(wide_filename, O_RDONLY | O_BINARY);   
     free(wide_filename);
 #elif defined(__lv2ppu__)
@@ -348,6 +349,7 @@ static sacd_input_t sacd_net_input_open(const char *target)
     if (dev == NULL)
     {
         fprintf(stderr, "libsacdread: Could not allocate memory.\n");
+        LOG(lm_main, LOG_ERROR, ("ERROR in sacd_net_input_open():libsacdread: Could not allocate memory"));
         return NULL;
     }
 
@@ -355,6 +357,7 @@ static sacd_input_t sacd_net_input_open(const char *target)
     if (dev->input_buffer == NULL)
     {
         fprintf(stderr, "libsacdread: Could not allocate memory.\n");
+        LOG(lm_main, LOG_ERROR, ("ERROR in sacd_net_input_open():libsacdread: Could not allocate memory"));
         goto error;
     }
 
@@ -371,8 +374,8 @@ static sacd_input_t sacd_net_input_open(const char *target)
     {
         fprintf(stderr, "Failed to connect: %s\n", err);
 
-        LOG(lm_main, LOG_ERROR, ("sacd_net_input_open(target=%s); Failed to connect! error=(%s)",target,err));
-        LOG(lm_main, LOG_ERROR, ("sacd_net_input_open(); address=%s, port=%d",substr(target, 0, strchr(target, ':') - target),atoi(strchr(target, ':') + 1)));
+        LOG(lm_main, LOG_ERROR, ("ERROR in sacd_net_input_open(target=%s); Failed to connect! inet_tryconnect() returns error=(%s)",target,err));
+        //LOG(lm_main, LOG_ERROR, ("ERROR in sacd_net_input_open(); address=%s, port=%d",substr(target, 0, strchr(target, ':') - target),atoi(strchr(target, ':') + 1)));
         
         goto error;
     }
