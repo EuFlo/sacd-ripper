@@ -172,7 +172,8 @@ sacd_reader_t *sacd_open(const char *ppath)
 
 #if defined(WIN32) || defined(_WIN32)
     wchar_t *w_pathname;
-    w_pathname = (wchar_t *)charset_convert(path, strlen(path), "UTF-8", "UCS-2-INTERNAL");   
+    
+    CHAR2WCHAR(w_pathname, path);
     ret = _wstat(w_pathname, &fileinfo_win);
     free(w_pathname);
 #else
