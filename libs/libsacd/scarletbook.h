@@ -99,7 +99,7 @@ enum character_set_t                // Character_Set_Code
 // string representation for character sets
 extern const char *character_set[];
 
-extern char *album_genre[];
+extern const char *album_genre[];
 
 // General Genre Table
 enum genre_t {
