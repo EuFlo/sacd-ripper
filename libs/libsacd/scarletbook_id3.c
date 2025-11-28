@@ -419,7 +419,7 @@ int scarletbook_id3_tag_render(scarletbook_handle_t *handle, uint8_t *buffer, in
             {
                 frame = id3_add_frame(tag, ID3_TCON);       
                 //id3_set_text_wraper(frame, (char *)genre_table[sacd_id3_genres[genre_t->genre]], handle->id3_tag_mode);
-                id3_set_text_wraper(frame, album_genre[genre_t->genre], handle->id3_tag_mode);
+                id3_set_text_wraper(frame, (char *)album_genre[genre_t->genre], handle->id3_tag_mode);
             }     
         }
         // else if (genre_t->category == 0x02)  //to implement Japanese Genre Table
