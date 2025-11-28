@@ -257,6 +257,7 @@ static void free_area(scarletbook_area_t *area)
         free(area->area_track_text[i].track_type_arranger);
         free(area->area_track_text[i].track_type_message);
         free(area->area_track_text[i].track_type_extra_message);
+        free(area->area_track_text[i].track_type_copyright);
         free(area->area_track_text[i].track_type_title_phonetic);
         free(area->area_track_text[i].track_type_performer_phonetic);
         free(area->area_track_text[i].track_type_songwriter_phonetic);
@@ -264,6 +265,7 @@ static void free_area(scarletbook_area_t *area)
         free(area->area_track_text[i].track_type_arranger_phonetic);
         free(area->area_track_text[i].track_type_message_phonetic);
         free(area->area_track_text[i].track_type_extra_message_phonetic);
+        free(area->area_track_text[i].track_type_copyright_phonetic);
     }
 
     free(area->description);
@@ -364,6 +366,7 @@ static int scarletbook_read_master_toc(scarletbook_handle_t *handle)
     }
 
     uint32_t total_sectors = sacd_get_total_sectors((sacd_reader_t*)handle->sacd); // get the real full size of disc [number of sectors] or file [number of SACD_LSN_SIZE]
+    handle->total_sectors_iso = total_sectors;
 
     // made some checks on the total size of iso/disc
     uint32_t area1_sectors_max = master_toc->area_1_toc_2_start + master_toc->area_1_toc_size;
@@ -394,11 +397,13 @@ static int scarletbook_read_master_toc(scarletbook_handle_t *handle)
         CHECK_ZERO(master_toc->disc_genre[i].reserved);
         CHECK_VALUE(master_toc->album_genre[i].category <= MAX_CATEGORY_COUNT);
         CHECK_VALUE(master_toc->disc_genre[i].category <= MAX_CATEGORY_COUNT);
+        SWAP16(master_toc->album_genre[i].genre);
+        SWAP16(master_toc->disc_genre[i].genre);
         CHECK_VALUE(master_toc->album_genre[i].genre <= MAX_GENRE_COUNT);
         CHECK_VALUE(master_toc->disc_genre[i].genre <= MAX_GENRE_COUNT);
     }
 
-    CHECK_VALUE(master_toc->text_area_count <= MAX_LANGUAGE_COUNT);
+    CHECK_VALUE(master_toc->text_area_count <= MAX_LANGUAGE_COUNT); //N_Text_Channels
 
     // point to eof master header
     p = handle->master_data + SACD_LSN_SIZE;
@@ -417,7 +422,7 @@ static int scarletbook_read_master_toc(scarletbook_handle_t *handle)
 
         CHECK_ZERO(master_text->reserved);
 
-        SWAP16(master_text->album_title_position);
+        SWAP16(master_text->album_title_position);  // If Album_Title is used, the Album_Title field is present and Album_Title_Ptr must have the value 64.
         SWAP16(master_text->album_title_phonetic_position);
         SWAP16(master_text->album_artist_position);
         SWAP16(master_text->album_artist_phonetic_position);
@@ -506,6 +511,10 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
     scarletbook_area_t *area = &handle->area[area_idx];
     char *current_charset;
     uint8_t character_set_idx;
+    int Track_List_1_is_present = 0;
+    int Track_List_2_is_present = 0;
+    int ISRC_and_Genre_List_is_present = 0;
+    size_t total_sectors_read = 0;
 
     p = area_data = area->area_data;
     area_toc = area->area_toc = (area_toc_t *) area_data;
@@ -525,7 +534,7 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
     SWAP16(area_toc->area_description_phonetic_offset);
     SWAP16(area_toc->copyright_phonetic_offset);
     SWAP32(area_toc->max_byte_rate);
-    SWAP16(area_toc->track_text_offset);
+    SWAP16(area_toc->track_text_offset);// Track_Text_Ptr are 0, 5 and 37
     SWAP16(area_toc->index_list_offset);
     SWAP16(area_toc->access_list_offset);
 
@@ -538,6 +547,11 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
     CHECK_ZERO(area_toc->reserved09);
     CHECK_ZERO(area_toc->reserved10);
 
+    if(area_toc->track_text_offset != 0 && area_toc->track_text_offset != 5 && area_toc->track_text_offset != 37 )
+    {
+        fwprintf(stdout, L"Notice in scarletbook_read_area_toc(): Track_Text_Ptr is not 0, 5 or 37 \n");
+        LOG(lm_main, LOG_NOTICE, ("Notice in scarletbook_read_area_toc(): Track_Text_Ptr is not 0, 5 or 37 "));
+    }
 
     character_set_idx = area->area_toc->languages[sacd_text_idx].character_set & 0x07;
     if(character_set_idx < MAX_LANGUAGE_COUNT )
@@ -557,6 +571,7 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
     if (area_toc->version.major > SUPPORTED_VERSION_MAJOR || area_toc->version.minor > SUPPORTED_VERSION_MINOR)
     {
         fwprintf(stdout, L"Notice in scarletbook_read_area_toc(): Unsupported area_toc version: %2i.%2i\n", area_toc->version.major, area_toc->version.minor);
+        LOG(lm_main, LOG_NOTICE, ("Notice in scarletbook_read_area_toc(): Unsupported area_toc version: %2i.%2i", area_toc->version.major, area_toc->version.minor));
     }
 
     // is this the 2 channel?
@@ -569,47 +584,106 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
         handle->mulch_area_idx = area_idx;
     }
 
-    // Area TOC size is SACD_LSN_SIZE
-    p += SACD_LSN_SIZE;
+    // Area_TOC_0 size is one SACD_LSN_SIZE
+    p += SACD_LSN_SIZE; total_sectors_read +=1;
 
     while (p < (area_data + area_toc->size * SACD_LSN_SIZE))
     {
-        if (strncmp((char *) p, "SACDTTxt", 8) == 0)
+
+        if (strncmp((char *) p, "SACDTRL1", 8) == 0)  // Track_List_1 must always be present in an Area TOC
         {
-            // we discard all other SACDTTxt entries
-            if (sacd_text_idx == 0)
+            area_tracklist_offset_t *tracklist;
+            tracklist = area->area_tracklist_offset = (area_tracklist_offset_t *) p;
+            for (i = 0; i < area_toc->track_count; i++)
             {
+                SWAP32(tracklist->track_start_lsn[i]);
+                SWAP32(tracklist->track_length_lsn[i]);
+            }
+            p += SACD_LSN_SIZE; total_sectors_read +=1;
+            Track_List_1_is_present = 1;
+        }
+        else if (strncmp((char *) p, "SACDTRL2", 8) == 0)   // Track_List_2 must always be present in an Area TOC !!!
+        {
+            area->area_tracklist_time = (area_tracklist_t *) p;            
+            p += SACD_LSN_SIZE; total_sectors_read +=1;
+            Track_List_2_is_present = 1;
+        }
+        else if (strncmp((char *) p, "SACD_IGL", 8) == 0)   // ISRC_and_Genre_List must always be present in an Area TOC. The length of ISRC_and_Genre_List is always two Sectors
+        {
+            area->area_isrc_genre = (area_isrc_genre_t *) p;
+            for (i = 0; i < area_toc->track_count; i++)
+            {
+                SWAP16(area->area_isrc_genre->track_genre[i].genre);
+            }
+            p += SACD_LSN_SIZE * 2;total_sectors_read +=2;
+            ISRC_and_Genre_List_is_present = 1;
+        }
+        else if (strncmp((char *) p, "SACD_ACC", 8) == 0)   // Access_List must be present if the Audio Area is DST coded. If the current Audio Area is Plain DSD, the Access_List is not allowed to be present.
+        {
+            // skip
+            p += SACD_LSN_SIZE * 32;total_sectors_read +=32;
+        }                
+        else if ((area_toc->track_text_offset != 0) && strncmp((char *) p, "SACDTTxt", 8) == 0)  // Track_Text is only present if Track_Text_Ptr is not set to zero
+        {   //The maximum length of Track_Text is 32 Sectors
+            // we discard all other SACDTTxt entries  ; If Track_Text is present, it must contain minimally one Text_Item
+            //for (c=1; c<=N_Text_Channels; c++)
+            if (sacd_text_idx == 0) // N_Text_Channels
+            {
+
+                LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; area[%d]",area_idx));
+                print_hex_dump(LOG_NOTICE, "SACDTTxt:", 64, 1, p, 128, 1);                
+                //for (tno=1; tno<=N_Tracks; tno++)
                 for (i = 0; i < area_toc->track_count; i++)
                 {
-                    area_text_t *area_text;
-                    uint8_t        track_type, track_amount;
+                    //Track_Text_Item_Ptr[c][tno] , 2 bytes
+
+
+                    Track_Text_Item_Ptr* area_text;
+                    uint8_t        track_type, track_items;
                     char           *track_ptr;
-                    area_text = area->area_text = (area_text_t *) p;
-                    SWAP16(area_text->track_text_position[i]);
+                    area_text = area->area_text = (Track_Text_Item_Ptr*) p;  // Track_Text_Item_Ptr[c][tno] , 2 bytes 
+                    SWAP16(area_text->track_text_position[i]);  // Track_Text_Item_Ptr[c][tno] , 2 bytes 
+                    
+                    LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; area_text->track_text_position, Track_Text_Item_Ptr[0][%d] =%d",i,area_text->track_text_position[i]));
                     if (area_text->track_text_position[i] > 0)
                     {
                         track_ptr = (char *) (p + area_text->track_text_position[i]);
-                        track_amount = *track_ptr;
-                        track_ptr += 4;
-                        for (j = 0; j < track_amount; j++)
-                        {
-                            track_type = *track_ptr;
-                            track_ptr++;
-                            track_ptr++;                         // skip unknown 0x20
+                        //DEBUG
+                        print_hex_dump(LOG_NOTICE, "N_Items:", 64, 1, track_ptr, 64, 1);
+                        track_items = *track_ptr; //N_Items[c][tno], 1 byte, values 1..10
+                        LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; (track_items), N_Items[0][%d] =%d",i,track_items));
+
+                        track_ptr += 4;    // ---> Text_Item[c][tno][item], format TOC_Text
+                        for (j = 0; j < track_items; j++)  // for (item=1; item<=N_Items[c][tno]; item++)
+                        {   // Text_Item[c][tno][item] , format is TOC_Text {Text_Type 1byte, Padding1 1 byte, Sp_String, Padding2 0..3} total lenght = 4 byte
+                            track_type = *track_ptr;  //  Text_Type , 1 byte
+                            track_ptr++;              // Padding1 , 1 byte, must allways have value = 0x20 !!!!
+                            // check to see if it is 0x20
+                            if(*track_ptr != 0x20)
+                            {
+                                fwprintf(stdout, L"\n\n Error: Padding1 has not 0x20 value !!\n");
+                                LOG(lm_main, LOG_ERROR, ("Error in scarletbook_read: Padding1 has not 0x20 value !!"));   
+                            }
+
+                            track_ptr++;              // Sp_String ; skip unknown 0x20, after SP_String follows Padding2 with variable lenght 0..3 bytesl;  value 0x00
+                            /*
+                                All Characters in a Special_String must belong to one and the same character set.
+                                Sp_String or Special_String is a sequence of Special_Char one or two byte characters, terminated by a zero Special_Char.
+                            */
                             if (*track_ptr != 0)
                             {
                                 int track_text_len=strlen(track_ptr);
-                                if (track_text_len > 255)
+                                if (track_text_len > 1024)
                                 {
-                                    fwprintf(stdout, L"\n\n Error: The lenght of track text is bigger than 255!!; area_idx=%d; track_type=0x%02x; track number=%d", area_idx, track_type, i + 1);
-                                    LOG(lm_main, LOG_ERROR, ("Error: The lenght of track text is bigger than 255!!; area_idx=%d; track_type=0x%02x; track number=%d", area_idx, track_type, i + 1));
-                                    break;
+                                    fwprintf(stdout, L"\n\n Warning: The lenght of track text is bigger than 1024!!; area_idx=%d; track_type=0x%02x; track number=%d", area_idx, track_type, i + 1);
+                                    LOG(lm_main, LOG_NOTICE, ("Warning in scarletbook_read: The lenght of track text is bigger than 1024 !!; area_idx=%d; track_type=0x%02x; track number=%d\n", area_idx, track_type, i + 1));
+                                    track_text_len = 1024; //break;
                                 }
 
                                 // check if exists illegal char code  
                                 // [e.g Savall - The Celtic Viol - La Viole Celtique - The Treble Viol- AVSA9865 - has incorrect char code = 0x19 in text of Composer in tracks 5,6,7,15,21 !!]
                                 char * track_ptr1 = track_ptr;
-                                for(int te=0; te < (int)strlen(track_ptr); te++)
+                                for(int te=0; te < (int)track_text_len; te++)
                                 {
                                     if(*(uint8_t*)track_ptr1 < (uint8_t)0x20)
                                     {
@@ -629,104 +703,93 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
                                     LOG(lm_main, LOG_ERROR, ("Error: Cannot convert to UTF8 the track text!!; track_type=0x%02x; track number=%d", track_type, i+1));
                                 }
                                 //DEBUG
-                                //LOG(lm_main, LOG_NOTICE, ("Notice: track_text_converted_ptr --> UTF8:%s; strlen()=%d; track_type=0x%02x; track number=%d", track_text_converted_ptr, (int)strlen(track_text_converted_ptr) ,track_type, i + 1));
+                                LOG(lm_main, LOG_NOTICE, ("Notice: track_text_converted_ptr --> UTF8:%s; strlen()=%d; track_type=0x%02x; track number=%d", track_text_converted_ptr, (int)strlen(track_text_converted_ptr) ,track_type, i + 1));
 
                                 switch (track_type)
                                 {
-                                case TRACK_TYPE_TITLE:
-                                    area->area_track_text[i].track_type_title = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_PERFORMER:
-                                    area->area_track_text[i].track_type_performer = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_SONGWRITER:
-                                    area->area_track_text[i].track_type_songwriter = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_COMPOSER:
-                                    area->area_track_text[i].track_type_composer = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_ARRANGER:
-                                    area->area_track_text[i].track_type_arranger = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_MESSAGE:
-                                    area->area_track_text[i].track_type_message = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_EXTRA_MESSAGE:
-                                    area->area_track_text[i].track_type_extra_message = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_TITLE_PHONETIC:
-                                    area->area_track_text[i].track_type_title_phonetic = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_PERFORMER_PHONETIC:
-                                    area->area_track_text[i].track_type_performer_phonetic = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_SONGWRITER_PHONETIC:
-                                    area->area_track_text[i].track_type_songwriter_phonetic = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_COMPOSER_PHONETIC:
-                                    area->area_track_text[i].track_type_composer_phonetic = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_ARRANGER_PHONETIC:
-                                    area->area_track_text[i].track_type_arranger_phonetic = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_MESSAGE_PHONETIC:
-                                    area->area_track_text[i].track_type_message_phonetic = track_text_converted_ptr;
-                                    break;
-                                case TRACK_TYPE_EXTRA_MESSAGE_PHONETIC:
-                                    area->area_track_text[i].track_type_extra_message_phonetic = track_text_converted_ptr;
-                                    break;
-                                default:
-                                    fwprintf(stdout, L"\n\n Error: Unknown track text type!!");
-                                    LOG(lm_main, LOG_ERROR, ("Error : scarletbook_read_area_toc(), Unknown track text type: 0x%02x", track_type));
-                                    break;
+                                    case TRACK_TYPE_TITLE:
+                                        area->area_track_text[i].track_type_title = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_PERFORMER:
+                                        area->area_track_text[i].track_type_performer = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_SONGWRITER:
+                                        area->area_track_text[i].track_type_songwriter = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_COMPOSER:
+                                        area->area_track_text[i].track_type_composer = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_ARRANGER:
+                                        area->area_track_text[i].track_type_arranger = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_MESSAGE:
+                                        area->area_track_text[i].track_type_message = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_EXTRA_MESSAGE:
+                                        area->area_track_text[i].track_type_extra_message = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_COPYRIGHT:
+                                        area->area_track_text[i].track_type_copyright = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_TITLE_PHONETIC:
+                                        area->area_track_text[i].track_type_title_phonetic = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_PERFORMER_PHONETIC:
+                                        area->area_track_text[i].track_type_performer_phonetic = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_SONGWRITER_PHONETIC:
+                                        area->area_track_text[i].track_type_songwriter_phonetic = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_COMPOSER_PHONETIC:
+                                        area->area_track_text[i].track_type_composer_phonetic = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_ARRANGER_PHONETIC:
+                                        area->area_track_text[i].track_type_arranger_phonetic = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_MESSAGE_PHONETIC:
+                                        area->area_track_text[i].track_type_message_phonetic = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_EXTRA_MESSAGE_PHONETIC:
+                                        area->area_track_text[i].track_type_extra_message_phonetic = track_text_converted_ptr;
+                                        break;
+                                    case TRACK_TYPE_COPYRIGHT_PHONETIC:
+                                        area->area_track_text[i].track_type_copyright_phonetic = track_text_converted_ptr;
+                                        break;                                     
+                                    default:
+                                        fwprintf(stdout, L"\n\n Notice: Unknown track text type!!\n");
+                                        LOG(lm_main, LOG_NOTICE, ("Notice : scarletbook_read_area_toc(), Unknown track text type: 0x%02x", track_type));
+                                        break;
                                 }
                             }
-                            if (j < track_amount - 1)
+                            if (j < track_items - 1)
                             {
-                                while (*track_ptr != 0)
+                                while (*track_ptr != 0) 
                                     track_ptr++;
 
-                                while (*track_ptr == 0)
+                                while (*track_ptr == 0) // Padding2, 0..3 bytes, value=0x00
                                     track_ptr++;
                             }
-                        }
-                    }
-                }
-            }
+                        } //for (j = 0; j < track_items
+                    } //if (area_text->track_text_position[i] > 0)
+                } // for (i = 0; i < area_toc->track_count;
+            } // end if (sacd_text_idx == 0) // N_Text_Channels
             sacd_text_idx++;
-            p += SACD_LSN_SIZE;
+            p += SACD_LSN_SIZE;total_sectors_read +=1;
+            if(total_sectors_read >= area_toc->size)break;
         }
-        else if (strncmp((char *) p, "SACD_IGL", 8) == 0)
-        {
-            area->area_isrc_genre = (area_isrc_genre_t *) p;
-            p += SACD_LSN_SIZE * 2;
-        }
-        else if (strncmp((char *) p, "SACD_ACC", 8) == 0)
-        {
-            // skip
-            p += SACD_LSN_SIZE * 32;
-        }
-        else if (strncmp((char *) p, "SACDTRL1", 8) == 0)
-        {
-            area_tracklist_offset_t *tracklist;
-            tracklist = area->area_tracklist_offset = (area_tracklist_offset_t *) p;
-            for (i = 0; i < area_toc->track_count; i++)
-            {
-                SWAP32(tracklist->track_start_lsn[i]);
-                SWAP32(tracklist->track_length_lsn[i]);
-            }
-            p += SACD_LSN_SIZE;
-        }
-        else if (strncmp((char *) p, "SACDTRL2", 8) == 0)
-        {
-            area->area_tracklist_time = (area_tracklist_t *) p;            
-            p += SACD_LSN_SIZE;
-        }
-        else
+        else        
         {
             break;
         }
     }
+
+    if(Track_List_1_is_present ==0 || Track_List_2_is_present == 0 || ISRC_and_Genre_List_is_present == 0 )
+    {
+        fwprintf(stdout, L"\n\n Error: Track_List_1 or Track_List_2 or ISRC_and_Genre_List are not detected !!!\n");
+        LOG(lm_main, LOG_ERROR, ("Error: Warning: Track_List_1 or Track_List_2 or ISRC_and_Genre_List are not detected !!!"));
+        return 0;
+    }
+
 
     return 1;
 }
