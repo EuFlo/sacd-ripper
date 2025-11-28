@@ -65,10 +65,10 @@ char *get_speaker_config_string(area_toc_t *);
 
 char *get_frame_format_string(area_toc_t *);
 
-char *get_album_dir(scarletbook_handle_t *, int artist_flag);
+char *get_album_dir(scarletbook_handle_t *);
 
-char *get_music_filename(scarletbook_handle_t *, int, int, const char *, int performer_flag);
-char *get_path_disc_album(scarletbook_handle_t *handle, int artist_flag);
+char *get_music_filename(scarletbook_handle_t *handle, int area, int track, const char *override_title);
+char *get_path_disc_album(scarletbook_handle_t *handle);
 int utf8cpy(char *, char *, int);
 
 #ifdef __cplusplus
