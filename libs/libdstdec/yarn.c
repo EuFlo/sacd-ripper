@@ -17,7 +17,7 @@
 
 /* for thread portability */
 #define _POSIX_PTHREAD_SEMANTICS
-#define _REENTRANT
+//#define _REENTRANT
 
 /* external libraries and entities referenced */
 #include <stdio.h>      /* fprintf(), stderr */
