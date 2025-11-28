@@ -896,7 +896,9 @@ int UnpackDSTframe(ebunch*  D,
   int ret = DSTErr_NoError;
 
   /* fill internal buffer with DSTframe */
-  FillBuffer(&D->S, DSTdataframe, D->FrameHdr.CalcNrOfBytes);
+  ret = FillBuffer(&D->S, DSTdataframe, D->FrameHdr.CalcNrOfBytes);
+  if(ret != DSTErr_NoError)
+    goto LAB_final;
 
   /* interpret DST header byte */
   if (FIO_BitGetIntUnsigned(&D->S, 1, &D->FrameHdr.DSTCoded))
