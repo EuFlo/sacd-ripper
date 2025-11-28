@@ -76,28 +76,32 @@
 
 enum frame_format_t
 {
-    FRAME_FORMAT_DST = 0, // maybe to add FRAME_FORMAT_INVALID -1
-    FRAME_FORMAT_DSD_3_IN_14 = 2,
-    FRAME_FORMAT_DSD_3_IN_16 = 3
+    FRAME_FORMAT_DST = 0, // DST coded. Flexible format
+    // = 1 ; Reserved
+    FRAME_FORMAT_DSD_3_IN_14 = 2,  // Fixed format. 2-Channel Stereo, Plain DSD, 3 Frames in 14 Sectors.
+    FRAME_FORMAT_DSD_3_IN_16 = 3   // Fixed format. 2-Channel Stereo, Plain DSD, 3 Frames in 16 Sectors
+    //  = 4..15 ; Reserved for future use
 };
 
-enum character_set_t
+enum character_set_t                // Character_Set_Code
 {
-    CHAR_SET_UNKNOWN       = 0,
-    CHAR_SET_ISO646        = 1,    // ISO 646 (IRV), no escape sequences allowed
-    CHAR_SET_ISO8859_1     = 2,    // ISO 8859-1, no escape sequences allowed
-    CHAR_SET_RIS506        = 3,    // MusicShiftJIS, per RIS-506 (RIAJ), Music Shift-JIS Kanji
-    CHAR_SET_KSC5601       = 4,    // Korean KSC 5601-1987
-    CHAR_SET_GB2312        = 5,    // Chinese GB 2312-80
-    CHAR_SET_BIG5          = 6,    // Big5
-    CHAR_SET_ISO8859_1_ESC = 7    // ISO 8859-1, single byte set escape sequences allowed
+    CHAR_SET_UNKNOWN       = 0,     // Not used
+    CHAR_SET_ISO646        = 1,    // ISO 646 International Reference Version (IRV),escape sequences are not allowed, 1 byte
+    CHAR_SET_ISO8859_1     = 2,    // ISO 8859-1, no escape sequences allowed, 1 byte
+    CHAR_SET_RIS506        = 3,    // RIS 506; 2 bytes pe character; MusicShiftJIS, per RIS-506 (RIAJ), Music Shift-JIS Kanji
+    CHAR_SET_KSC5601       = 4,    // Korean KSC 5601-1989[149]; Korean KSC 5601-1987; 2 bytes
+    CHAR_SET_GB2312        = 5,    // Chinese GB 2312-80[58]; 2 bytes;Chinese GB 2312-80
+    CHAR_SET_BIG5          = 6,    // Big5, 2 bytes
+    CHAR_SET_ISO8859_1_ESC = 7     // ISO 8859-1, escape sequences to single byte character sets are allowed
+     // 8..255 reseved for future use
 };
 
 // string representation for character sets
 extern const char *character_set[];
 
-extern const char *album_genre[];
+extern char *album_genre[];
 
+// General Genre Table
 enum genre_t {
 	GENRE_NOT_USED               = 0,       // 12
 	GENRE_NOT_DEFINED            = 1,       // 12
@@ -131,6 +135,7 @@ enum genre_t {
 	GENRE_BLUES                  = 29       // 0
 };
 
+//Genre_Table, 1 byte , Uint8 ; identifies the table used by Genre_Index ; 0= Not Used, 1=General Genre Table, 2=Japanese Genre Table. See RIS504, 3..255 Reserved for future standardization ;
 enum category_t {
 	CATEGORY_NOT_USED = 0,
 	CATEGORY_GENERAL  = 1,
@@ -138,6 +143,30 @@ enum category_t {
 };
 
 extern const char *album_category[];
+
+/*
+
+0   Reserved
+1   Title
+2   Name(s) of the performer(s)
+3   Name(s) of the songwriter(s)
+4   Name(s) of the composer(s)
+5   Name(s) of the arranger(s)
+6   Message(s) from the content provider and/or the artist
+7   Extra message(s)
+8   Copyright
+9..128   Reserved
+129  Title, phonetic text
+130  Name(s) of the performer(s), phonetic text
+131  Name(s) of the songwriter(s), phonetic text
+132  Name(s) of the composer(s), phonetic text
+133  Name(s) of the arranger(s), phonetic text
+134  Message(s) from the content provider and/or the artist, phonetic text
+135  Extra message(s), phonetic text
+136  Copyright, phonetic text
+137..255  Reserved
+
+*/
 
 enum track_type_t {
 	TRACK_TYPE_TITLE                  = 0x01,
@@ -147,6 +176,7 @@ enum track_type_t {
 	TRACK_TYPE_ARRANGER               = 0x05,
 	TRACK_TYPE_MESSAGE                = 0x06,
 	TRACK_TYPE_EXTRA_MESSAGE          = 0x07,
+    TRACK_TYPE_COPYRIGHT              = 0x08,
 
 	TRACK_TYPE_TITLE_PHONETIC         = 0x81,
 	TRACK_TYPE_PERFORMER_PHONETIC     = 0x82,
@@ -154,7 +184,8 @@ enum track_type_t {
 	TRACK_TYPE_COMPOSER_PHONETIC      = 0x84,
 	TRACK_TYPE_ARRANGER_PHONETIC      = 0x85,
 	TRACK_TYPE_MESSAGE_PHONETIC       = 0x86,
-	TRACK_TYPE_EXTRA_MESSAGE_PHONETIC = 0x87
+    TRACK_TYPE_EXTRA_MESSAGE_PHONETIC = 0x87,
+    TRACK_TYPE_COPYRIGHT_PHONETIC     = 0x88
 };
 
 #if PRAGMA_PACK
@@ -169,22 +200,32 @@ enum track_type_t {
 
 /**
  * Genre Information.
+ *  Genre_Code()
+ * {
+        Genre_Table, 1 byte , Uint8 ; identifies the table used by Genre_Index ; 0= Not Used, 1=General Genre Table, 2=Japanese Genre Table. See RIS504, 3..255 Reserved for future standardization ; 
+        Reserved  , 1 byte , Uint8, value =0
+        Genre_Index , 2 bytes , Uint16
+    }
  */
 typedef struct
 {
-    uint8_t  category;                        // category_t
-    uint16_t reserved;
-    uint8_t  genre;                           // genre_t
+    uint8_t  category;                        // category_t  ; Genre_Table
+    //uint16_t reserved;                        // BUG !!!!!!!!! must be uint8_t  not uint16_t 
+    uint8_t reserved; 
+    //uint8_t  genre;                           // genre_t  ; Genre_Index 2 bytes ; BUG  !! must be uint16_t
+    uint16_t  genre; 
 }
 ATTRIBUTE_PACKED genre_table_t;
 
 /**
  * Language & character set
+ * Language_Code[c] must contain the ISO 639 Language Code that is used with Text Channel c. All
+ *  text in Text Channel c must be according to this Language Code. The value $0000 is not allowed for Language_Code[c].
  */
 typedef struct
 {
-    char    language_code[2];                 // ISO639-2 Language code , "en"
-    uint8_t character_set;                    // char_set_t, 1 (ISO 646),  2 (ISO 8859-1)
+    char    language_code[2];                 // Language_Code, 2 bytes, String, :  "en" (ISO-639-1)
+    uint8_t character_set;                    // Character_Set_Code,1 byte, value = 1..7;  (ISO 646),  2 (ISO 8859-1)
     uint8_t reserved;
 }
 ATTRIBUTE_PACKED locale_table_t;
@@ -196,69 +237,85 @@ ATTRIBUTE_PACKED locale_table_t;
  */
 typedef struct
 {
-    char           id[8];                     // SACDMTOC
+// ---------------------------------- Master_TOC_0  ----------------------------------------------------------------------
+    // -----------------------------------M_TOC_0_Header , 16 bytes----------------------------------------
+    char           id[8];                     // SACDMTOC; Master_TOC_Signature
     struct
     {
         uint8_t major;
         uint8_t minor;
-    } ATTRIBUTE_PACKED version;               // 1.20 / 0x0114
+    } ATTRIBUTE_PACKED version;               //Spec_Version   1.20 / 0x0114  
     uint8_t        reserved01[6];
-    uint16_t       album_set_size;
-    uint16_t       album_sequence_number;
+    // ----------------------------------------END of M_TOC_0_Header , 16 bytes--------------------------------------
+    // -----------------------------------------Album_Info , 48 bytes -----------------------------------------------
+    uint16_t       album_set_size;          // Album_Set_Size,2bytes,  1..65535
+    uint16_t       album_sequence_number;   // Album_Sequence_Number
     uint8_t        reserved02[4];
-    char           album_catalog_number[16];  // 0x00 when empty, else padded with spaces for short strings
-    genre_table_t  album_genre[4];
+    char           album_catalog_number[16];  // Album_Catalog_Number, 16 bytes, String; 0x00 when empty, else padded with spaces for shorter strings
+    genre_table_t  album_genre[4];            // Album_Genre, 4x4 bytes;
     uint8_t        reserved03[8];
-    uint32_t       area_1_toc_1_start;   /*LSN for AREA_TOC_1 of 2 channel */
-    uint32_t       area_1_toc_2_start;   /*LSN for AREA_TOC_2 of 2 channel */
-    uint32_t       area_2_toc_1_start;   /*LSN for AREA_TOC_1 of M channel */
-    uint32_t       area_2_toc_2_start;   /*LSN for AREA_TOC_1 of M channel */
+    // -------------------------------------- END of Album_Info
+    // /*** Album text fields are in Master_Text[c] with c=1..8 ***/
+    // ----------------------------------------Disc_Info , 64 bytes -------------------------------------------------------
+    uint32_t       area_1_toc_1_start;   /*LSN for AREA_TOC_1 of 2 channel */  // 2CH_TOC_1_Address, 4bytes, Uint32, values 0, 544
+    uint32_t       area_1_toc_2_start;   /*LSN for AREA_TOC_2 of 2 channel */  // 2CH_TOC_2_Address, 4bytes, Uint32
+    uint32_t       area_2_toc_1_start;   /*LSN for AREA_TOC_1 of M channel */  // MC_TOC_1_Address, 4bytes, Uint32
+    uint32_t       area_2_toc_2_start;   /*LSN for AREA_TOC_2 of M channel */  // MC_TOC_2_Address, 4bytes, Uint32
 #if defined(__BIG_ENDIAN__)
-    uint8_t        disc_type_hybrid     : 1;
-    uint8_t        disc_type_reserved   : 7;
+    uint8_t        disc_type_hybrid     : 1;        // Disc_Flags, 1 byte
+    uint8_t        disc_type_reserved   : 7;        // Hybr, b7
 #else
-    uint8_t        disc_type_reserved   : 7;
-    uint8_t        disc_type_hybrid     : 1;
+    uint8_t        disc_type_reserved   : 7;        // Disc_Flags, 1 byte
+    uint8_t        disc_type_hybrid     : 1;        // Hybr, b7
 #endif
     uint8_t        reserved04[3];
-    uint16_t       area_1_toc_size;  /*Length in Sectors of AREA_TOC of  2ch */
-    uint16_t       area_2_toc_size;  /*Length in Sectors of AREA_TOC of M channel  */
-    char           disc_catalog_number[16];   // 0x00 when empty, else padded with spaces for short strings
-    genre_table_t  disc_genre[4];
-    uint16_t       disc_date_year;
+    uint16_t       area_1_toc_size;  /*Length in Sectors of AREA_TOC of  2ch */ // 2CH_TOC_Length, 2byte, Uint16, value 0, 5..
+    uint16_t       area_2_toc_size;  /*Length in Sectors of AREA_TOC of M channel  */  // MC_TOC_Length, 2byte, Uint16, value 0, 37..
+    char           disc_catalog_number[16];   // Disc_Catalog_Number, 16 bytes, String; 0x00 when empty, else padded with spaces for shorter strings
+    genre_table_t  disc_genre[4];       // Disc_Genre, 4x4 bytes
+    uint16_t       disc_date_year;      // Disc_Date , 4 bytes
     uint8_t        disc_date_month;
     uint8_t        disc_date_day;
     uint8_t        reserved05[4];
-    uint8_t        text_area_count;       // can be ZERO very seldom
-    uint8_t        reserved06[7];
-    locale_table_t locales[MAX_LANGUAGE_COUNT];
+    // --------------------------------------end of Disc_Info, 64 bytes ---------------------------------------
+    /*** Disc text fields are in Master_Text[c] with c=1..8 ***/
+    // -------------------------------------Text_Channels, 40 bytes --------------------------------------------
+    uint8_t        text_area_count;       // N_Text_Channels, 1 byte, Uint8  , values =0..8
+    uint8_t        reserved06[7];           // value 0
+    locale_table_t locales[MAX_LANGUAGE_COUNT]; // N_Text_Channels values= 0...8
 }
 ATTRIBUTE_PACKED master_toc_t;
+// ---------------------------------------------- END Text_Channels--------------------------------------------
+//------------------------------------Disc_WebLink_Info , 128 bytes---------------------------------------- v2.0
+// -------------------------------------Disc_Info_2, 64 bytes ----------------------------------------------v2.0
+// ------------------------------------reserved  until 2048-------------------------------------------------
+// ----------------------------------END of  Master_TOC_0 , 2048 bytes ----------------------------------------------------------------------
 
 /**
  * Master Album Information
+ * -----------------------------------------------Master_Text()[c] -------------------------------------------------
  */
 typedef struct
 {
-    char     id[8];                           // SACDText
+    char     id[8];                           // SACDText; Master_Text_Signature, 8 bytes, String
     uint8_t  reserved[8];
-    uint16_t album_title_position;
-    uint16_t album_artist_position;
-    uint16_t album_publisher_position;
-    uint16_t album_copyright_position;
-    uint16_t album_title_phonetic_position;
-    uint16_t album_artist_phonetic_position;
-    uint16_t album_publisher_phonetic_position;
-    uint16_t album_copyright_phonetic_position;
-    uint16_t disc_title_position;
-    uint16_t disc_artist_position;
-    uint16_t disc_publisher_position;
-    uint16_t disc_copyright_position;
-    uint16_t disc_title_phonetic_position;
-    uint16_t disc_artist_phonetic_position;
-    uint16_t disc_publisher_phonetic_position;
-    uint16_t disc_copyright_phonetic_position;
-    uint8_t  data[2000];
+    uint16_t album_title_position;  // Album_Title_Ptr, if (Album_Title_Ptr!=0) { Album_Title Special_String); value=64
+    uint16_t album_artist_position; // Album_Artist_Ptr
+    uint16_t album_publisher_position; // Album_Publisher_Ptr
+    uint16_t album_copyright_position;  // Album_Copyright_Ptr
+    uint16_t album_title_phonetic_position; // Album_Title_Phonetic_Ptr
+    uint16_t album_artist_phonetic_position; // Album_Artist_Phonetic_Ptr
+    uint16_t album_publisher_phonetic_position; //Album_Publisher_Phonetic_Ptr
+    uint16_t album_copyright_phonetic_position; // Album_Copyright_Phonetic_Ptr
+    uint16_t disc_title_position;  // Disc_Title_Ptr
+    uint16_t disc_artist_position;  // Disc_Artist_Ptr 
+    uint16_t disc_publisher_position; // Disc_Publisher_Ptr
+    uint16_t disc_copyright_position;  // Disc_Copyright_Ptr
+    uint16_t disc_title_phonetic_position; // Disc_Title_Phonetic_Ptr
+    uint16_t disc_artist_phonetic_position; // Disc_Artist_Phonetic_Ptr
+    uint16_t disc_publisher_phonetic_position; //Disc_Publisher_Phonetic_Ptr
+    uint16_t disc_copyright_phonetic_position; // Disc_Copyright_Phonetic_Ptr
+    uint8_t  data[2000];  // reserved until 2048 bytes
 }
 ATTRIBUTE_PACKED master_sacd_text_t;
 
@@ -284,84 +341,108 @@ typedef struct
 master_text_t;
 
 /**
- * Unknown Structure
+ * Manuf_Info
  */
 typedef struct
 {
-    char    id[8];                             // SACD_Man, manufacturer information
-    uint8_t information[2040];
+    char    id[8];                          // 'SACD_Man', manufacturer information
+    uint8_t information[2040];              //  Information, The content and the format of the data in the Information field is decided by the disc manufacturer. 
+                                            // If manufacturer information is not stored in this Sector, all bytes in the Information field must be set to zero
 }
 ATTRIBUTE_PACKED master_man_t;
 
 /**
- * Area TOC
+ * Area TOC,   Area_TOC, 2048 bytes, 1 sector, LSN
  *
  * The following structures are needed for Area TOC information.
  *
  */
 typedef struct
 {
-    char           id[8];                     // TWOCHTOC or MULCHTOC
+    // ---------------- A_TOC_0_Header , 16 bytes-----------------------------------------------------------------------------------------
+    char           id[8];                     // Area_TOC_Signature : TWOCHTOC or MULCHTOC
     struct
     {
         uint8_t major;
         uint8_t minor;
-    } ATTRIBUTE_PACKED version;               // 1.20 / 0x0114
-    uint16_t       size;                      // ex. 40 (total size of TOC)
+    } ATTRIBUTE_PACKED version;               // Spec_Version  : 1.20 / 0x0114
+    uint16_t       size;                      // Area_TOC_Length :  5..40 (total size of TOC); length of the Area_TOC in Sectors
     uint8_t        reserved01[4];
-    uint32_t       max_byte_rate;             /*up is for A_TOC_0_Header */ /*Max Average Byte Rate of Multiplexed Frames*/
-    uint8_t        sample_frequency;          // 0x04 = (64 * 44.1 kHz) (physically there can be no other values, or..? :)
+    // --------------------------------------- END of HEADER ; 16 bytes--------------------------------------------------------------------------------
+    // -----------------------------------------Area_Data, 112 bytes  ---------------------------------------------------------------------------------
+    /*up is for A_TOC_0_Header */
+    uint32_t       max_byte_rate;              /* Max_Byte_Rate; Max Average Byte Rate of Multiplexed Frames*/
+    uint8_t        sample_frequency;          //  FS_Code ; 0x04 = (64 * 44.1 kHz) (physically there can be no other values, or..? :)
 #if defined(__BIG_ENDIAN__)
-    uint8_t        reserved02   : 4;           //     uchar area_flags;
+    uint8_t        reserved02   : 4;           //     Area_Flags   1 byte;
     uint8_t        frame_format : 4;
 #else
-    uint8_t        frame_format : 4;
+    uint8_t        frame_format : 4;            //     Area_Flags  1 byte;
     uint8_t        reserved02   : 4;
 #endif
     uint8_t        reserved03[10];
-    uint8_t        channel_count;           // uchar N_channels; /* the num of audio channels for each frame */ 
+    uint8_t        channel_count;           // uchar N_channels; /* the num of audio channels for each frame */ ;N_Channels , 1 byte; Uint8 values = 2,5,6
 #if defined(__BIG_ENDIAN__)
-    uint8_t        loudspeaker_config : 5;  //      uchar area_config;    
-    uint8_t        extra_settings : 3;
+    uint8_t        loudspeaker_config : 5;  //    Loudspeker-config b4...b0   
+    uint8_t        extra_settings : 3;      // Area_Config, 1 byte:  Extra_Settings  b7...b5  
 #else
-    uint8_t        extra_settings : 3;
-    uint8_t        loudspeaker_config : 5;
+    uint8_t        extra_settings : 3;      // Area_Config, 1 byte:  Extra_Settings  b7...b5
+    uint8_t        loudspeaker_config : 5;  //    Loudspeker-config b4...b0
 #endif
-    uint8_t        max_available_channels;    //uchar max_ok_channels;
-    uint8_t        area_mute_flags;
+    uint8_t        max_available_channels;    //uchar max_ok_channels; Max_Available_Channels 0..6
+    uint8_t        area_mute_flags;   // Area_Mute_Flags, 1 byte
     uint8_t        reserved04[12];
 #if defined(__BIG_ENDIAN__)
-    uint8_t        reserved05 : 4;    // uchar area_copy_mng;
+    uint8_t        reserved05 : 4;    // uchar area_copy_mng; Area_Copy_Management, 1 byte
     uint8_t        track_attribute : 4;
 #else
-    uint8_t        track_attribute : 4;
+    uint8_t        track_attribute : 4; // Area_Copy_Management, 1 byte ; Track_Atribute b3...b0
     uint8_t        reserved05 : 4;
 #endif
     uint8_t        reserved06[15];
-    struct                                  // uchar total_play_time[3];
+    struct                                  // Total_Area_Play_Time  ; uchar total_play_time[3];
     {
-        uint8_t minutes;
-        uint8_t seconds;
-        uint8_t frames;
+        uint8_t minutes;        // 0...255
+        uint8_t seconds;        // 0...59
+        uint8_t frames;         // 0...74
     } ATTRIBUTE_PACKED total_playtime;
     uint8_t        reserved07;
-    uint8_t        track_offset;    /* track offset of a disc is from an album */ 
-    uint8_t        track_count;    /*The tracks number in the current audio area*/
-    uint8_t        reserved08[2];
-    uint32_t       track_start;     /* uint track_start_addr;   */
-    uint32_t       track_end;       /* uint track_end_addr;   */
-    uint8_t        text_area_count;
+    uint8_t        track_offset;    /* track offset of a disc is from an album */  // Track_Offset, 1 byte; 0...255
+    uint8_t        track_count;    /*The tracks number in the current audio area*/ // N_Tracks 1 byte; 1...255
+    uint8_t        reserved08[2];  // First_Bonus_Track_Number, 1 byte; reserverd 1 byte
+    uint32_t       track_start;     /* uint track_start_addr;   */ // Track_Area_Start_Address, 4byte; Uint32
+    uint32_t       track_end;       /* uint track_end_addr;   */  // Track_Area_End_Address  4byte; Uint32
+    
+            //-----------------------------Text_Channels , 40 bytes-------------------------------------------------------------
+    uint8_t        text_area_count;  // N_Text_Channels, 1 byte, value=0..8; offset =80 (0x50)
     uint8_t        reserved09[7];
-    locale_table_t languages[10];
-    uint16_t       track_text_offset; /*up is for Area_Data*/
-    uint16_t       index_list_offset;
-    uint16_t       access_list_offset;
-    uint8_t        reserved10[10];     // char reserved7[8];  // /*up is for List_pointer */
-    uint16_t       area_description_offset;   
-    uint16_t       copyright_offset;
-    uint16_t       area_description_phonetic_offset;
-    uint16_t       copyright_phonetic_offset;
+                                    // for (c=1; c<s=N_Text_Channels; c++)
+    locale_table_t languages[MAX_LANGUAGE_COUNT];
+    uint8_t        reserved091[8];        
+                                    // reserved 32-4*N_Text_Channels x 1 bytes; Uint8, value =0
+            // ---------------------------END of Text_Channel, 40 bytes --------------------------------------------------------
+                                    // Reserved until 128 bytes, value 0
+    // ----------------------------------------END of Area Data , 112 bytes----------------------------------------------------------------------------
+          /*up is for Area_Data*/  
+    // ---------------------------------------List_Pointers , 16 bytes------------------------------------------------------------------------------------------
+    uint16_t       track_text_offset; // Track_Text_Ptr , 2bytes, Uint16, values 0,5,37
+ 
+    uint16_t       index_list_offset;  // Index_List_Ptr,  2bytes, Uint16
+    uint16_t       access_list_offset; // Access_List_Ptr,  2bytes, Uint16
+    uint8_t        reserved10[10];     // char reserved7[8];  // Track_WebLink_List_Ptr ,Track_List_3_Ptr ,Set_Of_PlayLists_Ptr; 3 x 2bytes, Uint16; reserverd 4 bytes, value=0
+    /*up is for List_pointer */
+    //--------------------------------------END List_Pointers ; 16 bytes------------------------------------------------------------------
+    //---------------------------------------Area_Text ; 1904 bytes; Area_TOC_0 must always contain Area_Text., c=number of channels--------------------------------------------
+    //                                              for (c=1; c<=N_Text_Channels; c++)
+    uint16_t       area_description_offset;   // Area_Description_Ptr[c], 2bytes, Uint16
+    uint16_t       copyright_offset;            //Area_Copyright_Ptr[c], 2bytes, Uint16
+    uint16_t       area_description_phonetic_offset; //Area_Description_Phonetic_Ptr[c], 2bytes, Uint16
+    uint16_t       copyright_phonetic_offset; //  Area_Copyright_Phonetic_Ptr[c], 2bytes, Uint16
+                                                // reserved until 208 
+                                                // for (c=1; c<=N_Text_Channels; c++) 
+                                                // {  if (Area_Description_Ptr[c]!=0)
     uint8_t        data[1896];    // area_text[1904]
+    //--------------------------------------END of Area_Text ; 1904 bytes------------------------------------------------------------------------------------
 }
 ATTRIBUTE_PACKED area_toc_t;
 
@@ -374,6 +455,7 @@ typedef struct
     char *track_type_arranger;
     char *track_type_message;
     char *track_type_extra_message;
+    char *track_type_copyright;
     char *track_type_title_phonetic;
     char *track_type_performer_phonetic;
     char *track_type_songwriter_phonetic;
@@ -381,15 +463,16 @@ typedef struct
     char *track_type_arranger_phonetic;
     char *track_type_message_phonetic;
     char *track_type_extra_message_phonetic;
+    char *track_type_copyright_phonetic;
 } 
 area_track_text_t;
 
 typedef struct
 {
-    char     id[8];                           // SACDTTxt, Track Text
-    uint16_t track_text_position[];
+    char     id[8];                           // Track_Text_Signature  ; SACDTTxt, Track Text
+    uint16_t track_text_position[];   // Track_Text_Item_Ptr[c][tno] , 2 bytes
 }
-ATTRIBUTE_PACKED area_text_t;
+ATTRIBUTE_PACKED Track_Text_Item_Ptr;
 
 typedef struct
 {
@@ -552,7 +635,7 @@ typedef struct
     area_toc_t               * area_toc;
     area_tracklist_offset_t  * area_tracklist_offset;
     area_tracklist_t         * area_tracklist_time;
-    area_text_t              * area_text;
+    Track_Text_Item_Ptr      * area_text;
     area_track_text_t          area_track_text[255];                      // max of 255 supported tracks
     area_isrc_genre_t        * area_isrc_genre;
 
@@ -606,7 +689,10 @@ typedef struct
     uint32_t                   count_frames;                              // keep the number of audio frames in a track (for verification)
     int                        dsf_nopad;
     int                        concatenate;
-    int                        id3_tag_mode;  // 0=no id3 inserted; 1=default id3 v2.3; 2=miminal id3v2.3 tag; 4=id3v2.4;5=id3v2.4 minimal
+    int                        id3_tag_mode;  // 0=no id3tag inserted; 1=id3v2.3/utf16; 2=miminal id3v2.3/iso8859-1;3=id3v2.3/iso8859-1; 4=id3v2.4/utf8;5=minimal id3v2.4/utf8
+    int                        artist_flag;
+    int                        performer_flag;
+    uint32_t                   total_sectors_iso;
 } 
 scarletbook_handle_t;
 
