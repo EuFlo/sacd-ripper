@@ -53,7 +53,7 @@ typedef struct
     uint64_t audio_data_size;
 
     int channel_count;
-    uint64_t sample_count;
+    uint64_t sample_count; // in bytes !!!
 
     uint8_t buffer[MAX_CHANNEL_COUNT][SACD_BLOCK_SIZE_PER_CHANNEL];
     uint8_t *buffer_ptr[MAX_CHANNEL_COUNT];
@@ -94,10 +94,13 @@ static int dsf_create_header(scarletbook_output_format_t *ft)
 
     if (!handle->header)
         handle->header = (uint8_t *) calloc(DSF_HEADER_FOOTER_SIZE, 1);
-    if (!handle->footer)
-        handle->footer = (uint8_t *) calloc(DSF_HEADER_FOOTER_SIZE, 1);
     handle->header_size = 0;
-    handle->footer_size = 0;
+
+    if (!handle->footer)
+    {
+        handle->footer = (uint8_t *) calloc(DSF_HEADER_FOOTER_SIZE, 1);
+        handle->footer_size = 0;
+    }
 
     write_ptr = handle->header;
 
@@ -154,9 +157,12 @@ static int dsf_create_header(scarletbook_output_format_t *ft)
         handle->header_size += DATA_CHUNK_SIZE;
     }
 
-    {
+    {   // in order to avoid double call of scarletbook_id3_tag_render() it is used 'handle->footer_size==0' as a flag
         if(ft->sb_handle->id3_tag_mode != 0)
+        {
+          if(handle->footer_size == 0)
             handle->footer_size = scarletbook_id3_tag_render(sb_handle, handle->footer, ft->area, ft->track);
+        }
         else       
             handle->footer_size=0;  // no id_tag                    
     }
@@ -239,7 +245,7 @@ static int dsf_close(scarletbook_output_format_t *ft)
                     //LOG(lm_main, LOG_NOTICE, ("Dsf_close, nopad, memcopy: prev_track_no=track=%d, size_prev=%d, full=%d[%%]", prev_track_no,size_rezult, (int)size_rezult*100/SACD_BLOCK_SIZE_PER_CHANNEL ));
 
                     // empty the main frame buffers
-                    memset(handle->buffer[i], 0x00, SACD_BLOCK_SIZE_PER_CHANNEL); // Mandatory is 0x00. But tried with 0x99 (10011001) for reducing pop noise ( or 0x69)
+                    memset(handle->buffer[i], 0x00, SACD_BLOCK_SIZE_PER_CHANNEL); // Mandatory is 0x00. But tried with 0x99 (10011001) for reducing pop noise or 0x69 (0110 1001)
                     handle->buffer_ptr[i] = &handle->buffer[i][0];
                 }
                 else // very rare but happens
@@ -268,7 +274,7 @@ static int dsf_close(scarletbook_output_format_t *ft)
                 {
                     LOG(lm_main, LOG_ERROR, ("dsf_close(): error writing last buffer %s", ft->filename));
                     result = -1;
-                    handle->audio_data_size += bytes_w;
+                    //handle->audio_data_size += bytes_w;
                     break;
                 }
 
@@ -280,7 +286,7 @@ static int dsf_close(scarletbook_output_format_t *ft)
                 //LOG(lm_main, LOG_NOTICE, ("Dsf_close: nopad=0 or last track; prev_track_no=%d, track=%d, size_buffer=%d, full=%d[%%]", prev_track_no, ft->track, size_rezult,(int)size_rezult*100/SACD_BLOCK_SIZE_PER_CHANNEL));
 
                 // empty the main frame buffers
-                memset(handle->buffer[i], 0x00, SACD_BLOCK_SIZE_PER_CHANNEL); // Mandatory is 0x00. But tried with 0x99 (10011001) for reducing pop noise ( or 0x69)
+                memset(handle->buffer[i], 0x00, SACD_BLOCK_SIZE_PER_CHANNEL); // Mandatory is 0x00. But tried with 0x99 (10011001) for reducing pop noise or 0x69 (0110 1001)
                 handle->buffer_ptr[i] = handle->buffer[i];                   
             }
         }
@@ -355,7 +361,7 @@ static int dsf_write_frame(scarletbook_output_format_t *ft, const uint8_t *buf, 
                 handle->audio_data_size += SACD_BLOCK_SIZE_PER_CHANNEL;
 
                 // empty the main frame buffers
-                memset(buffer_row_start_ptr, 0x00, SACD_BLOCK_SIZE_PER_CHANNEL); // Mandatory is 0x00. But tried with 0x99 (10011001) for reducing pop noise ( or 0x69)
+                memset(buffer_row_start_ptr, 0x00, SACD_BLOCK_SIZE_PER_CHANNEL); // Mandatory is 0x00. But tried with 0x99 (10011001) for reducing pop noise or 0x69 (0110 1001)
                 handle->buffer_ptr[i] = buffer_row_start_ptr;
             }
         }
