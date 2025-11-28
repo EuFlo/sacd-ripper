@@ -41,7 +41,7 @@
  * Structure describing the ID3 tag.
  */
 struct id3_tag {
-	int id3_type;		/* Memory or file desriptor */
+	int id3_type;		/* Memory or file descriptor */
 	int id3_oflags;		/* Flags from open call */
 	int id3_flags;		/* Flags from tag header */
 	int id3_altered;	/* Set when tag has been altered */
@@ -131,7 +131,8 @@ struct id3_frame {
  */
 struct id3_framedesc {
 	uint32_t fd_id;
-	char fd_idstr[4];
+	char *fd_idstr; // It is used like: frame->fr_desc->fd_idstr[0] != 'T' ; memcpy(raw, fr->fr_desc->fd_idstr, 4);
+	//char fd_idstr[4]; // <-- was wrongly defined !! BUG!! See definition & initialization of framedesc[] and his data in id3_frame.c, which is OUT-OF-BOUNDs !! id3_framedesc framedesc[] = { {ID3_AENC, "AENC", "Audio encryption"}, {ID3_APIC, "APIC", "Attached picture"},..
 	char *fd_description;
 };
 
@@ -351,21 +352,13 @@ int8_t id3_get_encoding(struct id3_frame *);
 int id3_set_encoding(struct id3_frame *, int8_t);
 char *id3_get_text(struct id3_frame *);
 char *id3_get_comment(struct id3_frame *);
-int id3_set_comment(struct id3_frame *, char *, char *);
-int id3_set_text__performer(struct id3_frame *, char *);
-int id3_set_text__performer_UTF8(struct id3_frame *, char *);
-int id3_set_text__performer_UTF16(struct id3_frame *, char *);
+int id3_set_comment_wraper(struct id3_frame *frame, char *desc_text, char *val_text, int id3_tag_mode, char *lang3);
 char *id3_get_text_desc(struct id3_frame *);
 int id3_get_text_number(struct id3_frame *);
-int id3_set_text(struct id3_frame *, char *);
-int id3_set_text_utf8(struct id3_frame *, char *);
-int id3_set_text_utf16(struct id3_frame *, char *);
 int id3_set_text_number(struct id3_frame *, int);
 int id3_frame_is_text(struct id3_frame *frame);
-uint8_t *id3_encodeUTF8_to_ASCII_text(const char *);
-uint8_t *id3_encodeUTF8_to_UTF16_text(const char *);
 int id3_set_text_wraper(struct id3_frame *, char *, int);
-int id3_set_text__performer_wraper(struct id3_frame *, char *, int);
+int id3_set_text_txxx_wraper(struct id3_frame *, char *, char *, int);
 
 #if 0
 /* From id3_frame_content.c */
