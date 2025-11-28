@@ -56,7 +56,8 @@ int write_cue_sheet(scarletbook_handle_t *handle, const char *filename, int area
     strncat(filename_long,cue_filename, MAX_BUFF_FULL_PATH_LEN - 8);
 
     wchar_t *wide_filename;
-    wide_filename = (wchar_t *)charset_convert(filename_long, strlen(filename_long), "UTF-8", "UCS-2-INTERNAL");
+
+    CHAR2WCHAR(wide_filename, filename_long);
     fd = _wfopen(wide_filename, L"wb");
 	
     free(wide_filename);
@@ -75,7 +76,7 @@ int write_cue_sheet(scarletbook_handle_t *handle, const char *filename, int area
     fputc(0xbf, fd);
     fprintf(fd, "\nREM File created by SACD Extract, version: " SACD_RIPPER_VERSION_STRING "\n");
 
-    if (handle->master_toc->disc_genre[0].genre > 0)
+    if (handle->master_toc->disc_genre[0].genre > 0 && handle->master_toc->disc_genre[0].genre < MAX_GENRE_COUNT)
     {
         fprintf(fd, "REM GENRE %s\n", album_genre[handle->master_toc->disc_genre[0].genre]);
     }
