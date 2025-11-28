@@ -341,7 +341,8 @@ static int create_output_file(scarletbook_output_format_t *ft)
     strncat(filename_long,ft->filename, MAX_BUFF_FULL_PATH_LEN - 8);
 	
     wchar_t *wide_filename;
-	wide_filename = (wchar_t *)charset_convert(filename_long, strlen(filename_long), "UTF-8", "UCS-2-INTERNAL");
+	
+    CHAR2WCHAR(wide_filename,filename_long);
     ft->fd = _wfopen(wide_filename, L"wb");
 	
     free(wide_filename);
