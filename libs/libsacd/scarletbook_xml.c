@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <string.h>
-#include <charset.h>
 #include <version.h>
 #include <libxml/xmlreader.h>
 #include <libxml/parser.h>
@@ -10,6 +9,7 @@
 #include <libxml/xmlmemory.h>
 #include "scarletbook.h"
 #include "scarletbook_xml.h"
+#include "utils.h"
 
 //static void streamFile(const char *filename);
 void sacdXmlwriterFilename(scarletbook_handle_t *handle, const char *path_file);
@@ -193,16 +193,22 @@ void sacdXmlwriterFilename(scarletbook_handle_t *handle, const char *uri)
         return;
     }
   
-    /* Add an attribute with name "catalog" and value "xxxxxxx" to Album. */
-    strncpy(string_buf, mtoc->album_catalog_number, 16);
-    string_buf[16] = '\0';
-    rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "catalog_number",
-                                     BAD_CAST string_buf);
+    /* Add an element with name "catalog number" and value "xxxxxxx" to Album. */
+    memset(string_buf,0,sizeof(string_buf));
+    if(mtoc->album_catalog_number[0] != 0x00)
+    {  
+        strncpy(string_buf, mtoc->album_catalog_number, 16);
+        string_buf[16] = '\0';
+        trim_whitespace(string_buf);
+    }
+    rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "catalog_number", BAD_CAST string_buf);
     if (rc < 0)
     {
         printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
         return;
     }
+
+
     /* Add an attribute with name "set size" and value "xxxx" to Album. */
     rc = xmlTextWriterWriteFormatAttribute(writer, BAD_CAST "set_size",
                                       "%i", mtoc->album_set_size);
@@ -220,38 +226,74 @@ void sacdXmlwriterFilename(scarletbook_handle_t *handle, const char *uri)
         return;
     }
 
+
+    {
+        genre_table_t *t = &mtoc->album_genre[0];
+        if (t->category > 0 && t->category < MAX_CATEGORY_COUNT && t->genre < MAX_GENRE_COUNT)
+        {
+
+            if(t->category == 0x01)
+            /* Add an attribute with name "genre" and value "xxxxxx" to Album. */
+                rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "genre",BAD_CAST album_genre[t->genre]);
+            else if(t->category == 0x02)
+                /* Add an attribute with name "genre" and value "xxxxxx" to Album. */
+                    rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "genre",BAD_CAST "unimplemented");
+
+            if (rc < 0)
+            {
+                printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
+                return;
+            }
+
+        }
+    }
+
     /* Add an element with name "title" and value "XXXXXX" to Album. */
     if (handle->master_text.album_title != NULL)
         rc = xmlTextWriterWriteElement(writer, BAD_CAST "Title", BAD_CAST handle->master_text.album_title);
     else
-        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Title", BAD_CAST "");
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Title", BAD_CAST "empty");
 
     if (rc < 0)
     {
         printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
         return;
     }
+
     /* Add an element with name "artist" and value "xxxx" to Album. */
-    rc = xmlTextWriterWriteElement(writer, BAD_CAST "Artist", BAD_CAST handle->master_text.album_artist);
+    if(handle->master_text.album_artist != NULL)
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Artist", BAD_CAST handle->master_text.album_artist);
+    else
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Artist", BAD_CAST "empty");
+
     if (rc < 0)
     {
         printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
         return;
     }
+    
     /* Add an element with name "publisher" and value "xxxx" to Album. */
-    rc = xmlTextWriterWriteElement(writer, BAD_CAST "Publisher",BAD_CAST handle->master_text.album_publisher);
-    if (rc < 0)
+    if(handle->master_text.album_publisher != NULL)
     {
-        printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
-        return;
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Publisher",BAD_CAST handle->master_text.album_publisher);
+        if (rc < 0)
+        {
+            printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
+            return;
+        }
     }
+
     /* Add an element with name "copyright" and value "xxxx" to Album. */
-    rc = xmlTextWriterWriteElement(writer, BAD_CAST "Copyright", BAD_CAST handle->master_text.album_copyright);
-    if (rc < 0)
+    if(handle->master_text.album_copyright != NULL)
     {
-        printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
-        return;
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Copyright", BAD_CAST handle->master_text.album_copyright);
+        if (rc < 0)
+        {
+            printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
+            return;
+        }
     }
+
 
     /* Start an element named "Disc" as child of "Album". */
     rc = xmlTextWriterStartElement(writer, BAD_CAST "Disc");
@@ -263,6 +305,30 @@ void sacdXmlwriterFilename(scarletbook_handle_t *handle, const char *uri)
     /* Add an attribute with name "disc_version" and value "XXXXXX" to Disc. */
     rc = xmlTextWriterWriteFormatAttribute(writer, BAD_CAST "disc_version",
                                            "%2i.%02i", mtoc->version.major, mtoc->version.minor);
+    if (rc < 0)
+    {
+        printf("testXmlwriterFilename: Error at xmlTextWriterWriteFormatAttribute\n");
+        return;
+    }
+
+    /*  Add an attribute with name "catalog number" and value "XXXXXX" to Disc. */
+    memset(string_buf,0,sizeof(string_buf));
+    if(mtoc->disc_catalog_number[0] != 0x00)
+    {
+        strncpy(string_buf, mtoc->disc_catalog_number, 16);
+        string_buf[16] = '\0';
+        trim_whitespace(string_buf);    
+    }
+    rc =  xmlTextWriterWriteAttribute(writer, BAD_CAST "catalog_number",BAD_CAST string_buf);
+    if (rc < 0)
+    {
+        printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
+        return;
+    }  
+
+
+    rc = xmlTextWriterWriteFormatAttribute(writer, BAD_CAST "creation_date",
+                                             "%4i-%02i-%02i", mtoc->disc_date_year, mtoc->disc_date_month, mtoc->disc_date_day);
     if (rc < 0)
     {
         printf("testXmlwriterFilename: Error at xmlTextWriterWriteFormatAttribute\n");
@@ -282,22 +348,6 @@ void sacdXmlwriterFilename(scarletbook_handle_t *handle, const char *uri)
         return;
     }
 
-    /* Add an attribute with name "catalog number" and value "XXXXXX" to Disc. */
-    strncpy(string_buf, mtoc->disc_catalog_number, 16);
-    string_buf[16] = '\0';
-    rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "catalog_number",BAD_CAST string_buf);
-    if (rc < 0)
-    {
-        printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
-        return;
-    }
-    rc = xmlTextWriterWriteFormatAttribute(writer, BAD_CAST "creation_date",
-                                             "%4i-%02i-%02i", mtoc->disc_date_year, mtoc->disc_date_month, mtoc->disc_date_day);
-    if (rc < 0)
-    {
-        printf("testXmlwriterFilename: Error at xmlTextWriterWriteFormatAttribute\n");
-        return;
-    }
     uint8_t current_charset_nr;
     char *current_charset_name;
     current_charset_nr = mtoc->locales[0].character_set & 0x07;
@@ -318,61 +368,87 @@ void sacdXmlwriterFilename(scarletbook_handle_t *handle, const char *uri)
         printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
         return;
     }
-
-
-    genre_table_t *t = &mtoc->disc_genre[0];
-    if (t->category < MAX_CATEGORY_COUNT && t->genre < MAX_GENRE_COUNT)
+ 
+        //for (int g =0; g < 4; g++)
     {
-        /* Add an attribute with name "category" and value "xxxxxx" to Disc. */
-        rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "category",
-                                            BAD_CAST album_category[t->category]);
-        if (rc < 0)
+        genre_table_t *t = &mtoc->disc_genre[0];
+        if (t->category > 0 && t->category < MAX_CATEGORY_COUNT && t->genre < MAX_GENRE_COUNT)
         {
-            printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
-            return;
+
+             if(t->category == 0x01)
+            /* Add an attribute with name "genre" and value "xxxxxx" to Disc. */
+                rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "genre",BAD_CAST album_genre[t->genre]);
+
+            if(t->category == 0x02)
+            /* Add an attribute with name "genre" and value "xxxxxx" to Disc. */
+                rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "genre",BAD_CAST "unimplemented");
+
+            if (rc < 0)
+            {
+                printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
+                return;
+            }
+
+            ///* Add an attribute with name "table genere" and value "xxxxxx" to Disc. */
+            // rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "table_genre",BAD_CAST album_category[t->category]);
+            // if (rc < 0)
+            // {
+            //     printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
+            //     return;
+            // }
+
         }
-        /* Add an attribute with name "genre" and value "xxxxxx" to Disc. */
-        rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "genre",
-                                            BAD_CAST album_genre[t->genre]);
-        if (rc < 0)
-        {
-            printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
-            return;
-        }
-    }  
-    
+    }
 
     /* Add an element with name "title" and value "XXXXXX" to Disc. */
-    rc = xmlTextWriterWriteElement(writer, BAD_CAST "Title",
+    if(handle->master_text.disc_title != NULL)
+    {
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Title",
                                    (const xmlChar *)handle->master_text.disc_title);
+    }
+    else
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Title", (const xmlChar *)"empty");
     if (rc < 0)
     {
         printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
         return;
     }
     /* Add an element with name "artist" and value "xxxx" to Disc. */
-    rc = xmlTextWriterWriteElement(writer, BAD_CAST "Artist",
+    if(handle->master_text.disc_artist != NULL)
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Artist",
                                    (const xmlChar *)handle->master_text.disc_artist);
+    else
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Artist",(const xmlChar *)"empty");
     if (rc < 0)
     {
         printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
         return;
     }
+
     /* Add an element with name "publisher" and value "xxxx" to Disc. */
-    rc = xmlTextWriterWriteElement(writer, BAD_CAST "Publisher",
-                                   (const xmlChar *)handle->master_text.disc_publisher);
-    if (rc < 0)
+    if(handle->master_text.disc_publisher != NULL)
     {
-        printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
-        return;
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Publisher",
+                                   (const xmlChar *)handle->master_text.disc_publisher); 
+
+        if (rc < 0)
+        {
+            printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
+            return;
+        }
     }
+
     /* Add an element with name "copyright" and value "xxxx" to Disc. */
-    rc = xmlTextWriterWriteElement(writer, BAD_CAST "Copyright",(const xmlChar *)handle->master_text.disc_copyright);
-    if (rc < 0)
+    if(handle->master_text.disc_copyright != NULL)
     {
-        printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
-        return;
+        rc = xmlTextWriterWriteElement(writer, BAD_CAST "Copyright",(const xmlChar *)handle->master_text.disc_copyright);
+        if (rc < 0)
+        {
+            printf("testXmlwriterFilename: Error at xmlTextWriterWriteAttribute\n");
+            return;
+        }
     }
+
 
 
     for (int j = 0; j < handle->area_count; j++)
@@ -553,7 +629,7 @@ void sacdXmlwriterFilename(scarletbook_handle_t *handle, const char *uri)
             }
             else
             {
-                rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "value", BAD_CAST "unknown title");
+                rc = xmlTextWriterWriteAttribute(writer, BAD_CAST "value", BAD_CAST "empty title");
             }
             if (rc < 0)
             {
