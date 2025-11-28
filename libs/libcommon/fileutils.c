@@ -49,7 +49,7 @@ int stat_wrap(const char *pathname, struct stat *buf)
     wchar_t *w_pathname;
     struct _stat buffer;
 
-    w_pathname = (wchar_t *)charset_convert(pathname, strlen(pathname), "UTF-8", "UCS-2-INTERNAL");
+    CHAR2WCHAR(w_pathname, pathname);
     ret = _wstat(w_pathname, &buffer);
     free(w_pathname);
 #else
@@ -70,8 +70,9 @@ int path_dir_exists(char * path)
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
 
     wchar_t *w_pathname;
-    w_pathname = (wchar_t *)charset_convert(path, strlen(path), "UTF-8", "UCS-2-INTERNAL");
     struct _stat fileinfo_win;
+    
+    CHAR2WCHAR(w_pathname, path);
     ret = _wstat(w_pathname, &fileinfo_win);
     free(w_pathname);
     if (ret == 0 && (fileinfo_win.st_mode & _S_IFMT) == _S_IFDIR) // _S_IFREG  a device or a file
@@ -372,7 +373,8 @@ int recursive_mkdir(char* path_and_name,char * base_dir, mode_t mode)
                 strcpy(win_path_and_name_long, "\\\\?\\");
                 strncat(win_path_and_name_long, path_and_name, MAX_BUFF_FULL_PATH_LEN-8);
 
-                wchar_t *wide_path_and_name = (wchar_t *)charset_convert(win_path_and_name_long, strlen(win_path_and_name_long), "UTF-8", "UCS-2-INTERNAL");
+                wchar_t *wide_path_and_name;
+                CHAR2WCHAR(wide_path_and_name, win_path_and_name_long);
                 rc = _wmkdir(wide_path_and_name);
                 free(wide_path_and_name);
             }
@@ -403,7 +405,8 @@ int recursive_mkdir(char* path_and_name,char * base_dir, mode_t mode)
         strcpy(win_path_and_name_long, "\\\\?\\");
         strncat(win_path_and_name_long, path_and_name, MAX_BUFF_FULL_PATH_LEN-8);
 
-        wchar_t *wide_path_and_name = (wchar_t *)charset_convert(win_path_and_name_long, strlen(win_path_and_name_long), "UTF-8", "UCS-2-INTERNAL");
+        wchar_t *wide_path_and_name;
+        CHAR2WCHAR(wide_path_and_name, win_path_and_name_long);
         rc = _wmkdir(wide_path_and_name);
         free(wide_path_and_name);
     }
