@@ -174,7 +174,8 @@ int FillBuffer(StrData* SD, uint8_t* pBuf, int32_t Size)
 
   // SD->pDSTdata = NULL; /* BUG: this line causes memory leak */
 
-  CreateBuffer(SD, Size);
+  hr = CreateBuffer(SD, Size);
+  if(hr == -1)return(hr);
 
   for (cnt = 0; cnt < Size; cnt++)
   {
