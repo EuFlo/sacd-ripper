@@ -31,29 +31,40 @@
 #include "charset.h"
 #include "logging.h"
 
-char *substr(const char *pstr, int start, int numchars)
+#define MAX_BUF_SUBSTR 1024
+char *substr(const char *pstr, int start, int insizebytes)
 {
-    static char p_new_out[1024];
-    wchar_t *p_wchar_in;
+    static char buf_out[MAX_BUF_SUBSTR];
+    char *p_char_buf_tmp,*p_char_buf_tmp2;
     char *wchar_type;
-    char *c;
-    memset(p_new_out, 0, sizeof(p_new_out));
-    if (numchars < (int) sizeof(p_new_out))
+    size_t outsizebytes;
+
+    memset(buf_out, 0, MAX_BUF_SUBSTR);
+    if (insizebytes < MAX_BUF_SUBSTR - 4)  // -4 makes room for null-terminator
     {
 #ifdef _WIN32
-        wchar_type = (sizeof(wchar_t) == 2) ? 
-                    "UCS-2-INTERNAL" : "UCS-4-INTERNAL";
+        wchar_type = (sizeof(wchar_t) == 2) ? "UCS-2-INTERNAL" : "UCS-4-INTERNAL";
 #else
         wchar_type = "WCHAR_T";
 #endif
-        p_wchar_in = (wchar_t *) charset_convert((char *) pstr + start, numchars, "UTF-8", wchar_type);
-        c = charset_convert((char *) p_wchar_in, wcslen(p_wchar_in) * sizeof(wchar_t), wchar_type, "UTF-8");
-        strncpy(p_new_out, c, 256);
-        free(p_wchar_in);
-        free(c);
-        return p_new_out;
+        p_char_buf_tmp = charset_convert_ext((char *) (pstr + start), insizebytes, &outsizebytes, "UTF-8", wchar_type);
+        if(p_char_buf_tmp != NULL && outsizebytes > 0)
+        {
+                size_t outsizebytes2;
+                size_t insizebytes2 = outsizebytes;
+
+                p_char_buf_tmp2 = charset_convert_ext(p_char_buf_tmp, insizebytes2, &outsizebytes2, wchar_type, "UTF-8");
+                free(p_char_buf_tmp);
+
+                if(p_char_buf_tmp2 != NULL && outsizebytes2 > 0 && outsizebytes2 < MAX_BUF_SUBSTR - 4)
+                { 
+                        memcpy(buf_out, p_char_buf_tmp2, outsizebytes2);
+                        free(p_char_buf_tmp2);
+                }
+        }
     }
-    return p_new_out;
+
+    return buf_out;
 }
 
 char *str_replace(const char *src, const char *from, const char *to)
@@ -128,6 +139,9 @@ void trim_chars(char * str, const char * bad)
     int      len = strlen(str);
     unsigned b;
 
+    if(str == NULL || bad == NULL)return;
+    if(len > 16384)len=16384;
+
     for (b = 0; b < strlen(bad); b++)
     {
         pos = 0;
@@ -147,10 +161,18 @@ void trim_chars(char * str, const char * bad)
 // str - the string to trim
 void trim_whitespace(char * s) 
 {
-    uint8_t * p = (uint8_t *) s;
-    int l = strlen((char *) p);
+    uint8_t * p;
+    //int l = strlen((char *) p);
+    int l;
+    // do some checks
+    if(s == NULL) return;
 
-    while(isspace((int) p[l - 1])) p[--l] = 0;
+    p = (uint8_t *) s;
+    l = strlen(s);
+    if(l == 0) return;
+    if(l > 16384) l = 16384;
+
+    while(isspace((int) p[l - 1])) p[--l] = 0x00;
     while(* p && isspace((int) *p)) ++p, --l;
 
     memmove(s, p, l + 1);
@@ -211,9 +233,9 @@ void hex_dump_to_buffer(const void *buf, int len, int rowsize,
 
                 for (j = 0; j < ngroups; j++)
 #if defined(WIN32) || defined(_WIN32)
-                        lx += snprintf(linebuf + lx, linebuflen - lx, "%s%16.16I64x", j ? " " : "", *(ptr8 + j));
+                        lx += snprintf(linebuf + lx, linebuflen - lx, "%s%16.16llx", j ? " " : "", *(ptr8 + j));  // used to be "%s%16.16I64x"
 #else
-                        lx += snprintf(linebuf + lx, linebuflen - lx, "%s%16.16jx", j ? " " : "", *(ptr8 + j)); //(unsigned long long) //"%s%16.16llx" 
+                        lx += snprintf(linebuf + lx, linebuflen - lx, "%s%16.16jx", j ? " " : "", *(ptr8 + j)); //(unsigned long long) "%s%16.16llx"
 #endif                        
 
                 ascii_column = 17 * ngroups + 2;
