@@ -60,15 +60,6 @@
 
 
 
-
-// #if defined(WIN32) || defined(_WIN32)
-
-// #define CHAR2WCHAR(dst, src) dst = (wchar_t *)charset_convert(src, strlen(src), "UTF-8", "UCS-2-INTERNAL")
-// #else
-
-// #define CHAR2WCHAR(dst, src) dst = (wchar_t *)charset_convert(src, strlen(src), "UTF-8", "WCHAR_T") 
-// #endif
-
 static struct opts_s
 {
     int            two_channel;
@@ -81,10 +72,10 @@ static struct opts_s
     int            export_cue_sheet;
     int            print;
     char           *input_device; /* Access method driver should use for control */
-    char           *output_dir;
-    char           *output_dir_conc;
+    char           *output_dir_base;
+    char           *output_dir_conc_base;
     int            select_tracks;
-    uint8_t        selected_tracks[256]; /* scarletbook is limited to 256 tracks */
+    uint8_t        selected_tracks[256]; /* scarletbook is limited to 255 tracks */
     int            dsf_nopad;
     int            audio_frame_trimming; // if 1  trimm out audioframes in trimecode interval [area_tracklist_time->start...+duration]
     int            artist_flag;          // if artist ==1 then the artist name is added in folder name
@@ -195,21 +186,24 @@ static int parse_options(int argc, char *argv[])
         case 'e': 
             opts.output_dsdiff_em = 1;
             //opts.output_dsdiff = 0;
-            //opts.output_dsf = 0; 
+            //opts.output_dsf = 0;
             //opts.output_iso = 0;
             opts.export_cue_sheet = 1;
             break;
         case 'p': 
             //opts.output_dsdiff_em = 0; 
-            opts.output_dsdiff = 1; 
+            opts.output_dsdiff = 1;
             //opts.output_dsf = 0; 
             //opts.output_iso = 0;
             break;
         case 's': 
             //opts.output_dsdiff_em = 0; 
-            //opts.output_dsdiff = 0; 
-            opts.output_dsf = 1; 
-            //opts.output_iso = 0;
+            //opts.output_dsdiff = 0;
+            //opts.output_iso = 0; 
+            opts.output_dsf = 1;
+            // if(opts.two_channel == 0 && opts.multi_channel == 0)
+            //     opts.two_channel = 1; 
+
             break;
         case 't': 
             {
@@ -253,7 +247,7 @@ static int parse_options(int argc, char *argv[])
             opts.output_iso = 1;
             break;
 		case 'w':
-            opts.concurrent = 1;  // do nothing. The program already makes all required operations in multiple steps
+            opts.concurrent = 1;
             break;	
         case 'c': opts.convert_dst = 1; break;
         case 'C': opts.export_cue_sheet = 1; break;
@@ -291,9 +285,9 @@ static int parse_options(int argc, char *argv[])
                 // {
 				// 	n=n-1;
                 // }
-                //opts.output_dir = strndup(start_dir, n - 1); //  strndup didn't exist in Windows
-                opts.output_dir = calloc(n+1, sizeof(char));
-                memcpy(opts.output_dir, start_dir, n);                               
+                //opts.output_dir_base = strndup(start_dir, n - 1); //  strndup didn't exist in Windows
+                opts.output_dir_base = calloc(n+1, sizeof(char));
+                memcpy(opts.output_dir_base, start_dir, n);                               
             }
             break;
         }
@@ -321,9 +315,9 @@ static int parse_options(int argc, char *argv[])
                 // {
 				// 	n=n-1;
                 // }
-                //opts.output_dir_conc = strndup(start_dir, n - 1); //  strndup didn't exist in Windows
-                opts.output_dir_conc = calloc(n+1, sizeof(char));
-                memcpy(opts.output_dir_conc, start_dir, n);                               
+                //opts.output_dir_conc_base = strndup(start_dir, n - 1); //  strndup didn't exist in Windows
+                opts.output_dir_conc_base = calloc(n+1, sizeof(char));
+                memcpy(opts.output_dir_conc_base, start_dir, n);                               
             }		
             break;
         }
@@ -428,8 +422,8 @@ static void init(void)
     opts.convert_dst        = 0;
     opts.export_cue_sheet   = 0;
     opts.print              = 0;
-    opts.output_dir         = NULL;
-    opts.output_dir_conc	= NULL;
+    opts.output_dir_base        = NULL;
+    opts.output_dir_conc_base	= NULL;
     opts.input_device       = NULL; //"/dev/cdrom";
     opts.version            = 0;
     opts.dsf_nopad          = 0;
@@ -627,17 +621,17 @@ void show_options()
         fwprintf(stdout, L"\tInput -i (iso or connection) [%ls]\n",wide_filename);
         free(wide_filename);
     }
-    if(opts.output_dir !=NULL)
+    if(opts.output_dir_base !=NULL)
     {
         wchar_t *wide_filename;
-        CHAR2WCHAR(wide_filename, opts.output_dir);
+        CHAR2WCHAR(wide_filename, opts.output_dir_base);
         fwprintf(stdout, L"\tOutput folder -o [%ls]\n", wide_filename);
         free(wide_filename);        
     }
-    if(opts.output_dir_conc !=NULL) 
+    if(opts.output_dir_conc_base !=NULL) 
     {  
         wchar_t *wide_filename;
-        CHAR2WCHAR(wide_filename, opts.output_dir_conc);
+        CHAR2WCHAR(wide_filename, opts.output_dir_conc_base);
         fwprintf(stdout, L"\tOutput folder for concurent -y [%ls]\n",wide_filename);
         free(wide_filename);           
     }
@@ -673,7 +667,7 @@ void show_options()
 //   Useful for dsf, dff files.
 //     input: handle
 //            area_idx
-//            If there is not multichannel area then it did not add \Stereo..or Multich 
+//            If there is no multichannel area then it did not add \Stereo..or Multich 
 //            base_output_dir = directory from where to start creating new directory tree
 //
 char *create_path_output(scarletbook_handle_t *handle, int area_idx, char * base_output_dir)
@@ -683,8 +677,13 @@ char *create_path_output(scarletbook_handle_t *handle, int area_idx, char * base
     size_t album_path_len;
     size_t path_output_size = MAX_BUFF_FULL_PATH_LEN; //MAX_PATH_OUTPUT_SIZE;
 	
-    album_path = get_path_disc_album(handle,opts.artist_flag);
-	if(album_path==NULL)return NULL;
+    album_path = get_path_disc_album(handle);
+	if(album_path==NULL)
+    {
+        fwprintf(stdout, L"\n\n ERROR in main:create_path_output()...get_path_disc_album() returned NULL\n");
+        LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output()...get_path_disc_album() returned NULL"));        
+        return NULL;
+    }
 
     album_path_len = strlen(album_path);
 
@@ -692,46 +691,75 @@ char *create_path_output(scarletbook_handle_t *handle, int area_idx, char * base
 	
 	if(base_output_dir !=NULL)
 	{
-      size_t base_output_dir_len;
+        size_t base_output_dir_len;
 
-      base_output_dir_len =  strlen(base_output_dir);
-      if(base_output_dir_len >= MAX_BUFF_FULL_PATH_LEN/2)base_output_dir_len = MAX_BUFF_FULL_PATH_LEN/2; // shrink the size of base_output_dir to half
+        base_output_dir_len =  strlen(base_output_dir);
 
-      path_output_size = min(base_output_dir_len + 1 + album_path_len + 20,  MAX_BUFF_FULL_PATH_LEN - 1 );
-      path_output = calloc(path_output_size, sizeof(char));
+        if(base_output_dir_len > MAX_BUFF_FULL_PATH_LEN)  // cannot create a folder here
+        {
+            free(album_path);
+            fwprintf(stdout, L"\nERROR in main:create_path_output()...output folder is huge(> %d). Try one shorter.\n",MAX_BUFF_FULL_PATH_LEN);
+            LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output()...output folder is huge (> %d). Try one shorter.",MAX_BUFF_FULL_PATH_LEN)); 
+            return NULL;       
+        }
 
-      if(path_output != NULL)
-      {
-        memcpy(path_output, base_output_dir, base_output_dir_len);
+        if(base_output_dir_len + album_path_len > MAX_BUFF_FULL_PATH_LEN - 8 )  // shrink the size of album_path
+        {
+            free(album_path);
+            fwprintf(stdout, L"\nERROR in main:create_path_output(). The total size of output folder + the one will be generated is huge(> %d). Try one shorter.\n",MAX_BUFF_FULL_PATH_LEN);
+            LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output(). The total size of output folder + the one will be generated is huge (> %d). Try one shorter.",MAX_BUFF_FULL_PATH_LEN)); 
+            return NULL;     
+        }
 
-    #if defined(WIN32) || defined(_WIN32)      
-        if (base_output_dir[base_output_dir_len-1] != '\\')
-            strcat(path_output, "\\");
-    #else
-        if (base_output_dir[base_output_dir_len-1] != '/' )
-            strcat(path_output, "/");
-    #endif      
-            
 
-        if( base_output_dir_len + 2 + album_path_len < path_output_size)
-            strcat(path_output, album_path);
-      }
+        path_output_size = min(base_output_dir_len + album_path_len + 20,  MAX_BUFF_FULL_PATH_LEN - 1 );
+        path_output = calloc(path_output_size, sizeof(char));
+
+        if(path_output != NULL)
+        {
+            memcpy(path_output, base_output_dir, base_output_dir_len);
+
+        #if defined(WIN32) || defined(_WIN32)      
+            if (base_output_dir[base_output_dir_len-1] != '\\')
+                strcat(path_output, "\\");
+        #else
+            if (base_output_dir[base_output_dir_len-1] != '/' )
+                strcat(path_output, "/");
+        #endif      
+                
+
+            if( base_output_dir_len + 2 + album_path_len < path_output_size)
+                strcat(path_output, album_path);
+        }
+        else
+        {
+            wchar_t *wide_filename;
+  Err1:     CHAR2WCHAR(wide_filename, album_path);
+            fwprintf(stdout, L"\n ERROR in main:create_path_output()...calloc() returned NULL; album_path=%ls\n",wide_filename);
+            free(wide_filename);
+
+            LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output()...calloc() returned NULL; album_path=%s",album_path));
+            free(album_path);
+            return NULL;        
+        }
 
 	}
-	else
+	else  // base_output_dir ==NULL
     {
-      path_output_size = min(album_path_len + 20, MAX_BUFF_FULL_PATH_LEN); //MAX_PATH_OUTPUT_SIZE
-	  path_output = calloc(path_output_size, sizeof(char));
+        path_output_size = min(album_path_len + 20, MAX_BUFF_FULL_PATH_LEN); //MAX_PATH_OUTPUT_SIZE
+        path_output = calloc(path_output_size, sizeof(char));
 
-      if(path_output != NULL)
-      {
-        strcat(path_output, album_path);
-      }
-      else
-        LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output()...calloc() returned NULL"));
+        if(path_output != NULL)
+        {
+            strcat(path_output, album_path);
+        }
+        else
+        {
+            goto Err1;
+
+        }
 
     }
-
  
     free(album_path);
 
@@ -747,20 +775,26 @@ char *create_path_output(scarletbook_handle_t *handle, int area_idx, char * base
         strcat(path_output, get_speaker_config_string(handle->area[area_idx].area_toc));
     }
 
-    int ret_mkdir = recursive_mkdir(path_output, base_output_dir, 0777);
-
-    if (ret_mkdir != 0)
+    if (path_dir_exists(path_output) == 0)
     {
-        wchar_t *wide_filename;
-        CHAR2WCHAR(wide_filename, path_output);
-        fwprintf(stderr, L"\n\n Error: %ls directory can't be created.\n", wide_filename);
-        free(wide_filename);
+        // not exists, then create it
 
-        LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output()...directory can't be created: %s  ", path_output));
+        int ret_mkdir = recursive_mkdir(path_output, base_output_dir, 0777);
 
-        free(path_output);
-        return NULL;
+        if (ret_mkdir != 0)
+        {
+            wchar_t *wide_filename;
+            CHAR2WCHAR(wide_filename, path_output);
+            fwprintf(stdout, L"\nERROR in main:create_path_output()...folder '%ls' can't be created\n", wide_filename);
+            free(wide_filename);
+
+            LOG(lm_main, LOG_ERROR, ("ERROR in main:create_path_output()...folder '%s' can't be created", path_output));
+
+            free(path_output);
+            return NULL;
+        }
     }
+
     LOG(lm_main, LOG_NOTICE, ("NOTICE in main:create_path_output()...directory created: %s", path_output));
     LOG(lm_main, LOG_NOTICE, ("NOTICE in main:create_path_output()...base_output_dir: %s", base_output_dir));
     return path_output;
@@ -811,7 +845,8 @@ char * return_current_directory()
     int main(int argc, char *argv[])
 #endif
 {
-    char *album_filename = NULL, *musicfilename = NULL, *file_path = NULL;
+    char *album_filename = NULL, *musicfilename = NULL, *file_path = NULL, *output_dir = NULL;;
+    char *file_path_iso_unique = NULL;
     int i, area_idx;
     sacd_reader_t *sacd_reader = NULL;
 	int exit_main_flag=0; //0=succes; -1 failed
@@ -868,58 +903,58 @@ char * return_current_directory()
         }
 
         // default to 2 channel
-        if (opts.two_channel == 0 && opts.multi_channel == 0) 
+        if (opts.two_channel == 0 && opts.multi_channel == 0)
         {
             opts.two_channel = 1;
         }
 
 #if defined(WIN32) || defined(_WIN32)
-        if ((opts.output_dir == NULL) && (opts.output_dir_conc == NULL))
+        if ((opts.output_dir_base == NULL) && (opts.output_dir_conc_base == NULL))
         {
             // Get the current working directory:
             char *buffer;          
             if ((buffer = return_current_directory()) != NULL)
             {
-                opts.output_dir = strdup(buffer);
+                opts.output_dir_base = strdup(buffer);
                 free(buffer);
             }                                
         }
 #endif
 
-        if (opts.output_dir != NULL   ) // test if exists 
+        if (opts.output_dir_base != NULL   ) // test if exists 
         {
-            if (path_dir_exists(opts.output_dir) == 0)
+            if (path_dir_exists(opts.output_dir_base) == 0)
             {
                 wchar_t *wide_filename;
-                CHAR2WCHAR(wide_filename, opts.output_dir);
+                CHAR2WCHAR(wide_filename, opts.output_dir_base);
                 fwprintf(stdout, L"%ls output dir doesn't exist or is not a directory.\n",wide_filename);
                 free(wide_filename);
 
-                LOG(lm_main, LOG_ERROR, ("ERROR in main: output dir [%s] doesn't exist or is not a directory!!\n", opts.output_dir));
+                LOG(lm_main, LOG_ERROR, ("ERROR in main: output dir [%s] doesn't exist or is not a directory!!\n", opts.output_dir_base));
 
 				exit_main_flag=-1;
                 goto exit_main;
             }
-            if (opts.output_dir_conc == NULL)
-                opts.output_dir_conc = strdup(opts.output_dir);
+            if (opts.output_dir_conc_base == NULL && opts.concatenate)
+                opts.output_dir_conc_base = strdup(opts.output_dir_base);
         }
 		
-		if (opts.output_dir_conc != NULL   ) // test if exists 
+		if (opts.output_dir_conc_base != NULL   ) // test if exists 
         {
-            if (path_dir_exists(opts.output_dir_conc) == 0)
+            if (path_dir_exists(opts.output_dir_conc_base) == 0)
             {
                 wchar_t *wide_filename;
-                CHAR2WCHAR(wide_filename, opts.output_dir_conc);
+                CHAR2WCHAR(wide_filename, opts.output_dir_conc_base);
                 fwprintf(stdout, L"%ls doesn't exist or is not a directory.\n",wide_filename);
                 free(wide_filename);
 
-                LOG(lm_main, LOG_ERROR, ("ERROR in main: output dir conc [%s] doesn't exist or is not a directory!!\n", opts.output_dir_conc));
+                LOG(lm_main, LOG_ERROR, ("ERROR in main: output dir conc [%s] doesn't exist or is not a directory!!\n", opts.output_dir_conc_base));
 
                 exit_main_flag=-1;
                 goto exit_main;
             }
-            if (opts.output_dir == NULL)
-                opts.output_dir = strdup(opts.output_dir_conc);
+            if (opts.output_dir_base == NULL)
+                opts.output_dir_base = strdup(opts.output_dir_conc_base);
         }
 
         if(opts.input_device == NULL)
@@ -929,11 +964,10 @@ char * return_current_directory()
 
         fwprintf(stdout, L"\nStart reading sacd...\n");
         LOG(lm_main, LOG_NOTICE, ("Start reading sacd..."));
-
+Open_sacd:
         sacd_reader = sacd_open(opts.input_device);
         if (sacd_reader != NULL) 
         {
-
             handle = scarletbook_open(sacd_reader);
             if (handle)
             {
@@ -941,93 +975,137 @@ char * return_current_directory()
                 handle->audio_frame_trimming = opts.audio_frame_trimming;  
                 handle->dsf_nopad = opts.dsf_nopad;
                 handle->id3_tag_mode=opts.id3_tag_mode;
+                handle->artist_flag=opts.artist_flag;
+                handle->performer_flag=opts.performer_flag;
 
-
-                album_filename = get_album_dir(handle, opts.artist_flag);
-                LOG(lm_main, LOG_NOTICE, ("NOTICE in main:get_album_dir()...album_filename=[%s]", album_filename));
-
-                if (opts.print)
-                {
-                    scarletbook_print(handle);
+                if (opts.print) 
+                { 
+                    scarletbook_print(handle); 
+                    opts.print = 0;
                 }
 
-                uint32_t total_sectors = sacd_get_total_sectors(sacd_reader); // get the real full size of disc [number of sectors] or file [number of SACD_LSN_SIZE]
-
-                // generate the main output folder
-
-                char *album_path = get_path_disc_album(handle, opts.artist_flag);
-                char *output_dir;
-                size_t album_path_size;
-                size_t output_dir_size;
-
-                album_path_size = strlen(album_path);
-
-                LOG(lm_main, LOG_NOTICE, ("NOTICE in main:after get_path_disc_album(); album_path=[%s]",album_path));
-
-                if (opts.output_dir != NULL)
+                if( output_dir  == NULL)
                 {
-                    size_t size_opt_output_dir = strlen(opts.output_dir);
+                    // generate the main output folder stored in 'output_dir' 
+                    char *album_path = get_path_disc_album(handle);
+                    size_t album_path_size;
+                    size_t output_dir_size;
 
-                    output_dir_size = min(size_opt_output_dir + 1 + album_path_size + 1, MAX_BUFF_FULL_PATH_LEN-1); // MAX_PATH_OUTPUT_SIZE
-                    output_dir = calloc(output_dir_size, sizeof(char));
-                    LOG(lm_main, LOG_NOTICE, ("NOTICE in main:after calloc(); output_dir_size=[%d]",output_dir_size));
+                    album_path_size = strlen(album_path);
 
-                    if(output_dir !=NULL)
+                    //LOG(lm_main, LOG_NOTICE, ("NOTICE in main:after get_path_disc_album(); album_path=[%s]",album_path));
+
+                    if (opts.output_dir_base != NULL)
                     {
-                        strncpy(output_dir, opts.output_dir,output_dir_size);
-                     
-                    #if defined(WIN32) || defined(_WIN32)
-                        if (opts.output_dir[size_opt_output_dir - 1] != '\\')
-                            strcat(output_dir, "\\");
-                    #else
-                        if (opts.output_dir[size_opt_output_dir - 1] != '/')
-                            strcat(output_dir, "/"); 
-                    #endif
-                            
+                        size_t size_output_dir_base = strlen(opts.output_dir_base);
 
-                        if( album_path_size + size_opt_output_dir + 1 < output_dir_size)
-                            strcat(output_dir, album_path);
-                    }     
+                        output_dir_size = size_output_dir_base + 1 + album_path_size + 1; 
 
-                }
-                else
-                {
-                        output_dir_size = min(album_path_size + 1, MAX_BUFF_FULL_PATH_LEN); //MAX_PATH_OUTPUT_SIZE
-                        output_dir = calloc(output_dir_size, sizeof(char));
-                        if(output_dir != NULL)
-                        strcat(output_dir, album_path);
-                }
+                        // do some safety checks
+                        if(size_output_dir_base > MAX_BUFF_FULL_PATH_LEN-1)
+                        {
+                            LOG(lm_main, LOG_ERROR, ("ERROR in main: output folder is huge(> %d). Try one shorter.", MAX_BUFF_FULL_PATH_LEN));
+                            fwprintf(stdout, L"\nERROR in main: output folder is huge(> %d). Try one shorter.\n", MAX_BUFF_FULL_PATH_LEN);
+                            goto Err_close;
+                        } 
 
+                        if(output_dir_size > MAX_BUFF_FULL_PATH_LEN-1)
+                        {
+                            LOG(lm_main, LOG_ERROR, ("ERROR in main: The total size of output folder + the one will be generated is huge(> %d). Try one shorter.", MAX_BUFF_FULL_PATH_LEN));
+                            fwprintf(stdout, L"\nERROR in main: The total size of output folder + the one will be generated is huge(> %d). Try one shorter.\n", MAX_BUFF_FULL_PATH_LEN);
+                            goto Err_close;
+                        } 
 
-                free(album_path);
-                LOG(lm_main, LOG_NOTICE, ("NOTICE in main: after get_path_disc_album()...output_dir=[%s]", output_dir));
-
-                if (opts.export_cue_sheet)  // in fact,  export XML metadata at first
-                {
-
-                    int ret_mkdir = recursive_mkdir(output_dir, opts.output_dir, 0777);
-
-                    if (ret_mkdir != 0)
-                    {
-                        LOG(lm_main, LOG_ERROR, ("ERROR in main: exporting XML, after recursive_mkdir...output_dir: %s; ret=%d;", output_dir, ret_mkdir));
-                        free(album_filename);
-                        free(output_dir);
-                        scarletbook_close(handle);
-                        sacd_close(sacd_reader);
-                        exit_main_flag = -1;
                         
-                        goto exit_main;
+                        output_dir = calloc(output_dir_size, sizeof(char));
+                        LOG(lm_main, LOG_NOTICE, ("NOTICE in main:after calloc(output_dir_size=[%d], 1)",output_dir_size));
+
+                        if(output_dir !=NULL)
+                        {
+                            strncpy(output_dir, opts.output_dir_base,output_dir_size);
+                        
+                        #if defined(WIN32) || defined(_WIN32)
+                            if (opts.output_dir_base[size_output_dir_base - 1] != '\\')
+                                strcat(output_dir, "\\");
+                        #else
+                            if (opts.output_dir_base[size_output_dir_base - 1] != '/')
+                                strcat(output_dir, "/"); 
+                        #endif
+                                
+
+                            if( album_path_size + size_output_dir_base + 1 < output_dir_size)
+                                strcat(output_dir, album_path);
+                        }
+                        else
+                        {
+Err_calloc1:                            
+                            LOG(lm_main, LOG_ERROR, ("ERROR in main: at calloc(); cannot create output_dir"));
+                            fwprintf(stdout, L"\nERROR in main: at calloc(); cannot create output_dir\n");
+
+Err_close:                  scarletbook_close(handle);
+                            sacd_close(sacd_reader);
+                            exit_main_flag=-1;
+                            
+                            goto exit_main;                            
+                        }     
+
+                    }
+                    else
+                    {
+                            output_dir_size = album_path_size + 1;
+                            output_dir = calloc(output_dir_size, sizeof(char));
+                            if(output_dir != NULL)
+                                strcat(output_dir, album_path);
+                            else goto Err_calloc1;    
+                    }
+
+
+                    free(album_path);
+                    LOG(lm_main, LOG_NOTICE, ("NOTICE in main: after get_path_disc_album()...output_dir=[%s]", output_dir));
+                
+                } // if( output_dir  == NULL)
+
+                if(album_filename == NULL)
+                {
+                    album_filename = get_album_dir(handle);
+
+                    if(album_filename == NULL)
+                    {
+                        LOG(lm_main, LOG_ERROR, ("ERROR in main: cannot create album_filename"));
+                        fwprintf(stdout, L"\nERROR in main: cannot create album_filename\n"); 
+                        goto Err_close;                       
+
+                    }
+                    //LOG(lm_main, LOG_NOTICE, ("NOTICE in main: after get_album_dir()...album_filename=[%s]", album_filename));
+                }
+
+                if (opts.export_cue_sheet && file_path_iso_unique == NULL)  // export XML metadata at first; if already iso export is done, then do not export xml second time
+                {
+
+                    if (path_dir_exists(output_dir) == 0)
+                    {
+                        // not exists, then create it
+                        int ret_mkdir = recursive_mkdir(output_dir, opts.output_dir_base, 0777);
+
+                        if (ret_mkdir != 0)
+                        {
+                            LOG(lm_main, LOG_ERROR, ("ERROR in main: exporting XML, after recursive_mkdir...output_dir='%s'; ret=%d", output_dir, ret_mkdir));
+                            free(album_filename);
+                            free(output_dir);
+                            
+                            goto Err_close;
+                        }
                     }
 
                     // create file XML metadata file
                     char *metadata_file_path_unique = get_unique_filename(NULL, output_dir, album_filename, "xml");
                     if (metadata_file_path_unique == NULL)
-                        fwprintf(stderr, L"\n ERROR: cannot create get_unique_filename XML for metadata (==NULL) !!\n");
+                        fwprintf(stdout, L"\n ERROR: cannot create get_unique_filename XML for metadata (==NULL) !!\n");
                     else
                     {
                         wchar_t *wide_filename;
                         CHAR2WCHAR(wide_filename, metadata_file_path_unique);
-                        fwprintf(stdout, L"\n\n Exporting metadata in XML file: [%ls] ... \n", wide_filename);
+                        fwprintf(stdout, L"\n\nExporting metadata in XML file: [%ls] ... \n", wide_filename);
                         free(wide_filename);
 
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
@@ -1044,33 +1122,31 @@ char * return_current_directory()
 #endif
 
                         free(metadata_file_path_unique);
-                        fwprintf(stdout, L"\n\n We are done exporting metadata in XML file. \n");
+                        fwprintf(stdout, L"\n\nWe are done exporting metadata in XML file. \n");
                         LOG(lm_main, LOG_NOTICE, ("NOTICE in main: done exporting metadata in XML file."));
                     }
-                }         // end if XML export       
+                } // end if XML export       
 
                 if (opts.output_iso)
                 {
+                    opts.output_iso = 0;   
+
                     // create the output folder
-                    
                     LOG(lm_main, LOG_NOTICE, ("NOTICE in main: extracting ISO, before recursive_mkdir(output_dir,..)...output_dir: %s", output_dir));
 
                     if (path_dir_exists(output_dir) == 0)
                     {
                         // not exists, then create it
 
-                        int ret_mkdir = recursive_mkdir(output_dir, opts.output_dir, 0777);
+                        int ret_mkdir = recursive_mkdir(output_dir, opts.output_dir_base, 0777);
 
                         if (ret_mkdir != 0)
                         {
                             LOG(lm_main, LOG_ERROR, ("ERROR in main: ISO, after recursive_mkdir...output_dir: %s; ret=%d;", output_dir, ret_mkdir));
                             free(album_filename);
                             free(output_dir);
-                            scarletbook_close(handle);
-                            sacd_close(sacd_reader);
-                            exit_main_flag=-1;
-                            
-                            goto exit_main;
+                          
+                            goto Err_close;
                         }
                     }
 
@@ -1081,6 +1157,10 @@ char * return_current_directory()
 #define FAT32_SECTOR_LIMIT 2090000
                     uint32_t sector_size = FAT32_SECTOR_LIMIT;
                     uint32_t sector_offset = 0;
+                    uint32_t total_sectors;
+
+                    total_sectors = handle->total_sectors_iso;
+
                     if (total_sectors > FAT32_SECTOR_LIMIT)
                     {
                         musicfilename = (char *) malloc(512);
@@ -1100,28 +1180,39 @@ char * return_current_directory()
                     else
 #endif
                     {
-                        char *file_path_iso_unique = get_unique_filename(NULL, output_dir, album_filename, "iso");
+                        file_path_iso_unique = get_unique_filename(NULL, output_dir, album_filename, "iso");
 
                         wchar_t *wide_filename;
                         CHAR2WCHAR(wide_filename, file_path_iso_unique);
-                        fwprintf(stdout, L"\n Exporting ISO output in file: [%ls] ... \n", wide_filename);
+                        fwprintf(stdout, L"\nExporting ISO output in file: [%ls] ... \n", wide_filename);
                         free(wide_filename);
 
-                        scarletbook_output_enqueue_raw_sectors(output, 0, total_sectors, file_path_iso_unique, "iso");
-
-                        free(file_path_iso_unique);
+                        scarletbook_output_enqueue_raw_sectors(output, 0, handle->total_sectors_iso, file_path_iso_unique, "iso");
                         
                     }
-                    
                     
                     print_start_time();
                     scarletbook_output_start(output);
                     scarletbook_output_destroy(output);
                     print_end_time();
 
-                    fwprintf(stdout, L"\n We are done exporting ISO.                                                          \n");
+                    fwprintf(stdout, L"\nWe are done exporting ISO.\n");
 
                 } // end if (opts.output_iso)
+
+
+                if(opts.concurrent && file_path_iso_unique != NULL) // if concurent, use 'file_path_iso_unique' as an input device
+                {
+                    opts.concurrent = 0;
+                    scarletbook_close(handle);
+                    sacd_close(sacd_reader);
+                    free(opts.input_device);
+                    opts.input_device = strdup(file_path_iso_unique);  // use the freshly already created iso file as an input device/net
+                    fwprintf(stdout, L"\nConcurent mode. Start re-opening sacd iso file locally... \n");
+                    LOG(lm_main, LOG_NOTICE, ("NOTICE in main: Concurent mode. Start re-opening sacd iso file locally... "));
+                    goto Open_sacd;
+                }
+
 
                 if (opts.output_dsf || opts.output_dsdiff || opts.output_dsdiff_em || opts.export_cue_sheet)
                 {
@@ -1130,14 +1221,14 @@ char * return_current_directory()
                     {
                         if (opts.multi_channel && (!has_multi_channel(handle))) // skip if we want multich but disc have no multich area
                         {
-                            fwprintf(stdout, L"\n Asked multichannel format but disc has no multichannel area. So skip processing...                                            \n");
+                            fwprintf(stdout, L"\n Asked for multi-channel format but disc has no multichannel area. So skip processing...\n");
                             opts.multi_channel = 0;
                             continue;
                         }
 
                         if (opts.two_channel && (!has_two_channel(handle) )) // skip;   if want 2ch but disc have no 2 ch area (YES !!! Exists these type of discs  - e.g Rubinstein - Grieg..only multich area)                                                    
                         {
-                                fwprintf(stdout, L"\n Asked for stereo format but disc has no stereo area. So skip processing...                                            \n");
+                                fwprintf(stdout, L"\n Asked for stereo format but disc has no stereo area. So skip processing...\n");
                                 opts.two_channel = 0;
                                 continue;
                         }
@@ -1147,16 +1238,14 @@ char * return_current_directory()
                         
 
                         // create the output folder with Stereo/MulCh
-                        char *output_dir_dsd = create_path_output(handle, area_idx, opts.output_dir);
+                        char *output_dir_dsd = create_path_output(handle, area_idx, opts.output_dir_base);
                         if (output_dir_dsd == NULL)
                         {
                             free(album_filename);
                             free(output_dir);
-                            scarletbook_close(handle);
-                            sacd_close(sacd_reader);
-                            exit_main_flag = -1;
-                            LOG(lm_main, LOG_ERROR, ("ERROR in main: DSF.., after create_path_output()"));
-                            goto exit_main;
+                            LOG(lm_main, LOG_ERROR, ("ERROR in main: after create_path_output() for dsf/dff/dff_em"));
+                            
+                            goto Err_close;
                         }
 
                         if (opts.output_dsdiff_em)
@@ -1166,7 +1255,7 @@ char * return_current_directory()
 
                             wchar_t *wide_filename;
                             CHAR2WCHAR(wide_filename, file_path_dsdiff_unique);
-                            fwprintf(stdout, L"\n Exporting DFF edit master output in file: [%ls] ... \n", wide_filename);
+                            fwprintf(stdout, L"\nExporting DFF edit master output in file: [%ls] ... \n", wide_filename);
                             free(wide_filename);
 
                             output = scarletbook_output_create(handle, handle_status_update_track_callback, handle_status_update_progress_callback, safe_fwprintf);
@@ -1183,9 +1272,9 @@ char * return_current_directory()
                             
                             print_end_time();						
 
-                            fwprintf(stdout, L"\n\n We are done exporting DFF edit master.                                                          \n");
+                            fwprintf(stdout, L"\n\nWe are done exporting DFF edit master.\n");
 
-                            // Must generate cue sheet
+                            // Must generate cue sheet because it is mandatory just for dsdiff_em files
                             opts.export_cue_sheet=1;
 
                         } // end if  opts.output_dsdiff_em
@@ -1197,14 +1286,14 @@ char * return_current_directory()
 
                             wchar_t *wide_filename;
                             CHAR2WCHAR(wide_filename, cue_file_path_unique);
-                            fwprintf(stdout, L"\n\n Exporting CUE sheet: [%ls] ... \n", wide_filename);
+                            fwprintf(stdout, L"\n\nExporting CUE sheet: [%ls] ... \n", wide_filename);
                             free(wide_filename);
 
                             file_path = make_filename(NULL, NULL, album_filename, "dff");
 
 							int rez_cuesheet= write_cue_sheet(handle, file_path, area_idx, cue_file_path_unique);
 							if(rez_cuesheet != -1)
-								fwprintf(stdout, L"\n\n We are done exporting CUE sheet. \n");
+								fwprintf(stdout, L"\n\nWe are done exporting CUE sheet. \n");
 							else
 								fwprintf(stdout, L"\n\n ERROR: Cannot create CUE sheet file. \n");    
                             
@@ -1219,13 +1308,10 @@ char * return_current_directory()
                             wchar_t *wide_folder;
                             CHAR2WCHAR(wide_folder, output_dir_dsd);
                             if (opts.output_dsf)
-                            {
-                                fwprintf(stdout, L"\n Exporting DSF output in folder: [%ls] ... \n", wide_folder);
-                            }
+                                fwprintf(stdout, L"\nExporting DSF output in folder: [%ls] ... \n", wide_folder);
                             else
-                            {
-                                fwprintf(stdout, L"\n Exporting DSDIFF output in folder: [%ls]  ... \n", wide_folder);
-                            }
+                                fwprintf(stdout, L"\nExporting DSDIFF output in folder: [%ls]  ... \n", wide_folder);
+
                             free(wide_folder);
 
                             output = scarletbook_output_create(handle, handle_status_update_track_callback, handle_status_update_progress_callback, safe_fwprintf);
@@ -1240,7 +1326,7 @@ char * return_current_directory()
                                     if (opts.select_tracks && opts.selected_tracks[i] == 0x0)
                                         continue;
 
-                                    musicfilename = get_music_filename(handle, area_idx, i, "", opts.performer_flag);
+                                    musicfilename = get_music_filename(handle, area_idx, i, "");
 
                                     if (opts.output_dsf)
                                     {
@@ -1290,7 +1376,7 @@ char * return_current_directory()
                                         char conc_string[32];
                                         snprintf(conc_string, sizeof(conc_string), "[%02d-%02d]",first_track + 1, last_track + 1);
 
-                                        musicfilename = get_music_filename(handle, area_idx, first_track, conc_string, opts.performer_flag);
+                                        musicfilename = get_music_filename(handle, area_idx, first_track, conc_string);
 
                                         fwprintf(stdout, L"\n Concatenate tracks: %d to %d\n", first_track+1,last_track+1);
                                         if (opts.output_dsf)
@@ -1316,8 +1402,6 @@ char * return_current_directory()
                                 }                                                                                                  
                             }                          
 
-                           
-
                             print_start_time();
 
                             LOG(lm_main, LOG_NOTICE, ("Start processing dsf/dff files"));
@@ -1329,9 +1413,9 @@ char * return_current_directory()
                             print_end_time();
 
                             if (opts.output_dsf)
-                                fwprintf(stdout, L"\n\n We are done exporting DSF..                                                          \n");                       
+                                fwprintf(stdout, L"\n\nWe are done exporting DSF...\n");                       
                             else
-                                fwprintf(stdout, L"\n\n We are done exporting DSDIFF..                                                          \n");
+                                fwprintf(stdout, L"\n\nWe are done exporting DSDIFF...\n");
 
                         } // end if (opts.output_dsf || opts.output_dsdiff)
 
@@ -1345,10 +1429,12 @@ char * return_current_directory()
 
                     } // end while opts.two_channel + opts.multi_channel
 
-                }  // end if opts....
+                }  // end if (opts.output_dsf || opts.output_dsdiff || opts.output_dsdiff_em || opts.export_cue_sheet)
 
                 free(output_dir);
                 free(album_filename);
+                free(file_path_iso_unique);
+
                 scarletbook_close(handle);
 
             }  // end if handle
@@ -1360,7 +1446,7 @@ char * return_current_directory()
             }
             
 			sacd_close(sacd_reader);
-        }
+        }  // end if (sacd_reader != NULL
 		else
         {
             fwprintf(stdout, L"\nErrors opening sacd !!\n");
@@ -1390,11 +1476,11 @@ exit_main_1:
     free_lock(g_fwprintf_lock);
     destroy_logging();
 
-    if (opts.output_dir != NULL) free(opts.output_dir);
+    free(opts.output_dir_base);
 
-	if (opts.output_dir_conc != NULL) free(opts.output_dir_conc);
+	free(opts.output_dir_conc_base);
 
-    if (opts.input_device != NULL) free(opts.input_device);
+    free(opts.input_device);
 
 #ifdef PTW32_STATIC_LIB
     pthread_win32_process_detach_np();
