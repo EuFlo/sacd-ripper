@@ -630,8 +630,8 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
             if (sacd_text_idx == 0) // N_Text_Channels
             {
 
-                LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; area[%d]",area_idx));
-                print_hex_dump(LOG_NOTICE, "SACDTTxt:", 64, 1, p, 128, 1);                
+                //LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; area[%d]",area_idx));
+                //print_hex_dump(LOG_NOTICE, "SACDTTxt:", 64, 1, p, 128, 1);                
                 //for (tno=1; tno<=N_Tracks; tno++)
                 for (i = 0; i < area_toc->track_count; i++)
                 {
@@ -644,14 +644,14 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
                     area_text = area->area_text = (Track_Text_Item_Ptr*) p;  // Track_Text_Item_Ptr[c][tno] , 2 bytes 
                     SWAP16(area_text->track_text_position[i]);  // Track_Text_Item_Ptr[c][tno] , 2 bytes 
                     
-                    LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; area_text->track_text_position, Track_Text_Item_Ptr[0][%d] =%d",i,area_text->track_text_position[i]));
+                    //LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; area_text->track_text_position, Track_Text_Item_Ptr[0][%d] =%d",i,area_text->track_text_position[i]));
                     if (area_text->track_text_position[i] > 0)
                     {
                         track_ptr = (char *) (p + area_text->track_text_position[i]);
                         //DEBUG
-                        print_hex_dump(LOG_NOTICE, "N_Items:", 64, 1, track_ptr, 64, 1);
+                        //print_hex_dump(LOG_NOTICE, "N_Items:", 64, 1, track_ptr, 64, 1);
                         track_items = *track_ptr; //N_Items[c][tno], 1 byte, values 1..10
-                        LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; (track_items), N_Items[0][%d] =%d",i,track_items));
+                        //LOG(lm_main, LOG_NOTICE, ("scarletbook_read: read_area_toc() ; (track_items), N_Items[0][%d] =%d",i,track_items));
 
                         track_ptr += 4;    // ---> Text_Item[c][tno][item], format TOC_Text
                         for (j = 0; j < track_items; j++)  // for (item=1; item<=N_Items[c][tno]; item++)
